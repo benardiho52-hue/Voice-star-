@@ -1,4 +1,4 @@
-App.jsimport React, { useState } from "react";
+import React, { useState } from "react";
 import { SafeAreaView, View, Text, ScrollView, TouchableOpacity, StatusBar, StyleSheet } from "react-native";
 
 const C = { bg:"#090711", panel:"#151022", panel2:"#211632", purple:"#A855F7", pink:"#FF4FCB", white:"#F8F4FF", muted:"#A79BB8", line:"#302341", red:"#FF4267" };
