@@ -1,0 +1,22 @@
+{
+  "name": "voice-star",
+  "version": "1.0.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "web": "expo start --web",
+    "check": "npx expo-doctor",
+    "test:bundle": "expo export --platform android",
+    "build:android:apk": "expo prebuild --platform android --clean && cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.0",
+    "expo": "~57.0.27",
+    "expo-status-bar": "~3.0.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-url-polyfill": "^2.0.0"
+  }
+}
