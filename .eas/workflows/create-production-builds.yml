@@ -1,12 +1,10 @@
-{
-"cli": {
-"version": ">= 16.0.0"
-},
-"build": {
-"preview": {
-"android": {
-"buildType": "apk"
-}
-}
-}
-}
+
+name: Build VoiceStar APK
+
+jobs:
+  build_android:
+    name: Build Android APK
+    type: build
+    params:
+      platform: android
+      profile: preview
