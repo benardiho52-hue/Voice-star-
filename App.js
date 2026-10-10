@@ -3,7 +3,7 @@ import { supabase } from "./Supabase";
 
 import { supabase } from "./Supabase";
 import 'react-native-url-polyfill/auto';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from import { supabase } from "./Supabase"; '@supabase/supabase-js';
 
 const SUPABASE_URL =
   'https://kdpqbdytfvnbtiwnaafo.supabase.co';
