@@ -1,8 +1,12 @@
-name: Create Production Builds
-
-jobs:
-  build_android:
-    type: build
-    params:
-      platform: android
-      profile: preview
+{
+"cli": {
+"version": ">= 16.0.0"
+},
+"build": {
+"preview": {
+"android": {
+"buildType": "apk"
+}
+}
+}
+}
