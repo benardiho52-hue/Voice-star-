@@ -269,3 +269,13 @@ export default function App() {
             <View style={s.row}>
               <TextInput
                 style={[
+import { createClient } from '@supabase/supabase-js';
+import 'react-native-url-polyfill/auto';
+
+const SUPABASE_URL = 'YOUR_SUPABASE_PROJECT_URL';
+const SUPABASE_PUBLISHABLE_KEY = 'YOUR_SUPABASE_PUBLISHABLE_KEY';
+
+export const supabase = createClient(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY
+);
