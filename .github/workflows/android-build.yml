@@ -1,3 +1,4 @@
+
 name: VoiceStar Android APK Build
 
 on:
@@ -27,37 +28,38 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: package.json
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Install npm dependencies
-        run: npm install --no-audit --no-fund
+      - name: Install project dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
-      - name: Align Expo package versions
-        run: npx expo install --fix
-
-      - name: Validate Expo configuration
+      - name: Check Expo project configuration
         run: npx expo config --type public
 
-      - name: Generate native Android project
-        run: npx expo prebuild --platform android --clean
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --non-interactive
 
       - name: Build release APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+          ./gradlew assembleRelease --no-daemon
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: VoiceStar-Android-APK
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
+  
