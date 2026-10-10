@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "VoiceStar",
+    "slug": "voice-star",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ]
+  }
+}
