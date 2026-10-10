@@ -9,13 +9,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: voicestar-android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-android:
     name: Build VoiceStar APK
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
-      - name: Checkout repository
+      - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Set up Node.js
@@ -23,22 +28,33 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: package.json
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-      - name: Check app configuration
+      - name: Install npm dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Align Expo package versions
+        run: npx expo install --fix
+
+      - name: Validate Expo configuration
         run: npx expo config --type public
 
-      - name: Build Android APK
-        run: |
-          npx expo install expo-dev-client
-          npx expo prebuild --platform android
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --clean
 
-      - name: Upload APK
+      - name: Build release APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: VoiceStar-Android-APK
