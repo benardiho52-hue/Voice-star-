@@ -1,0 +1,47 @@
+name: VoiceStar Android APK Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    name: Build VoiceStar APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check app configuration
+        run: npx expo config --type public
+
+      - name: Build Android APK
+        run: |
+          npx expo install expo-dev-client
+          npx expo prebuild --platform android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoiceStar-Android-APK
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
