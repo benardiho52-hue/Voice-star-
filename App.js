@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { supabase } from "./Supabase";
 
-const COLORS = {
+const C = {
   bg: "#090711",
   panel: "#171022",
   purple: "#9B5CFF",
@@ -21,12 +21,31 @@ const COLORS = {
   white: "#FFFFFF",
   muted: "#B7ADC9",
   border: "#352647",
+  green: "#4DE1B4",
 };
 
 const demoSongs = [
-  { id: "1", title: "Midnight Melody", artist: "Nova", genre: "Afro Soul" },
-  { id: "2", title: "Your Love", artist: "Kemi Star", genre: "R&B" },
-  { id: "3", title: "Rise Again", artist: "Jay Voice", genre: "Gospel" },
+  { id: "demo1", title: "Midnight Melody", artist: "Nova", genre: "Afro Soul" },
+  { id: "demo2", title: "Your Love", artist: "Kemi Star", genre: "R&B" },
+  { id: "demo3", title: "Rise Again", artist: "Jay Voice", genre: "Gospel" },
+];
+
+const tabs = [
+  ["Home", "⌂"],
+  ["Discover", "⌕"],
+  ["Studio", "♫"],
+  ["Stage", "🎤"],
+  ["Chat", "☏"],
+  ["Groups", "♧"],
+  ["Tasks", "★"],
+  ["Profile", "♙"],
+];
+
+const initialTasks = [
+  { id: "daily", title: "Visit VoiceStar today", reward: 10, done: false },
+  { id: "discover", title: "Explore Discover", reward: 10, done: false },
+  { id: "profile", title: "Complete your profile", reward: 20, done: false },
+  { id: "community", title: "Visit a stage room", reward: 15, done: false },
 ];
 
 export default function App() {
@@ -35,104 +54,136 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [email, setEmail] = useState("");
   const [authEmail, setAuthEmail] = useState("");
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+
   const [title, setTitle] = useState("");
   const [genre, setGenre] = useState("Afrobeats");
   const [description, setDescription] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [authLoading, setAuthLoading] = useState(false);
-  const [user, setUser] = useState(null);
+
+  const [roomName, setRoomName] = useState("");
+  const [room, setRoom] = useState(null);
+  const [seats, setSeats] = useState([]);
+  const [chatMessage, setChatMessage] = useState("");
+  const [messages, setMessages] = useState([
+    { id: "m1", sender: "Nova", text: "Welcome to VoiceStar!" },
+    { id: "m2", sender: "Kemi Star", text: "Your voice is amazing!" },
+  ]);
+
+  const [groupName, setGroupName] = useState("");
+  const [groups, setGroups] = useState([]);
+  const [tasks, setTasks] = useState(initialTasks);
+  const [xp, setXp] = useState(0);
+  const [gifts, setGifts] = useState(0);
+
+  const [effects, setEffects] = useState({
+    Reverb: 30,
+    Echo: 10,
+    Bass: 50,
+    Treble: 50,
+    Compression: 30,
+    Pitch: 0,
+  });
 
   useEffect(() => {
     loadSongs();
     getSession();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      setEmail(currentUser?.email || "");
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const current = session?.user ?? null;
+      setUser(current);
+      setEmail(current?.email || "");
     });
 
-    return () => subscription.unsubscribe();
+    return () => data.subscription.unsubscribe();
   }, []);
 
   async function getSession() {
-    const { data } = await supabase.auth.getSession();
-    const currentUser = data.session?.user ?? null;
-    setUser(currentUser);
-    setEmail(currentUser?.email || "");
+    try {
+      const { data } = await supabase.auth.getSession();
+      const current = data.session?.user ?? null;
+      setUser(current);
+      setEmail(current?.email || "");
+    } catch (error) {
+      console.log("Session error:", error.message);
+    }
   }
 
   async function loadSongs() {
     try {
-      const { data, error } = await supabase.from("songs").select("*").limit(30);
+      const { data, error } = await supabase
+        .from("songs")
+        .select("*")
+        .limit(30);
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const mapped = data.map((song, index) => ({
+      if (!error && Array.isArray(data)) {
+        const saved = data.map((song, index) => ({
           id: String(song.id ?? index),
           title: song.title || "Untitled song",
           artist: song.artist_name || "VoiceStar artist",
           genre: song.genre || "Music",
         }));
-        setSongs(mapped);
-      } else {
-        setSongs(demoSongs);
+
+        setSongs([
+          ...saved,
+          ...demoSongs.filter(
+            (demo) => !saved.some((song) => song.id === demo.id)
+          ),
+        ]);
       }
-    } catch (_error) {
-      setSongs(demoSongs);
+    } catch (error) {
+      console.log("Song loading error:", error.message);
     }
   }
 
-  async function handleSignIn() {
+  async function signIn() {
     if (!authEmail.trim()) {
-      Alert.alert("Email required", "Enter your email to sign in.");
+      Alert.alert("Email required", "Enter your email first.");
       return;
     }
 
     setAuthLoading(true);
-
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: authEmail.trim(),
       });
 
-      if (error) {
-        Alert.alert("Sign in failed", error.message);
-        return;
-      }
+      if (error) throw error;
 
       Alert.alert(
-        "Magic link sent",
-        "Check your email and sign in with the link sent to you."
+        "Check your email",
+        "Open the sign-in link sent to your email."
       );
       setAuthEmail("");
     } catch (error) {
-      Alert.alert("Error", error.message || "Unable to sign in.");
+      Alert.alert("Sign-in failed", error.message || "Please try again.");
     } finally {
       setAuthLoading(false);
     }
   }
 
-  async function handleSignOut() {
-    try {
-      await supabase.auth.signOut();
-      setUser(null);
-      setEmail("");
-      Alert.alert("Signed out", "You have been logged out.");
-    } catch (error) {
-      Alert.alert("Error", error.message || "Could not sign out.");
+  async function signOut() {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      Alert.alert("Error", error.message);
+      return;
     }
+
+    setUser(null);
+    setEmail("");
   }
 
   async function publishSong() {
     if (!title.trim()) {
-      Alert.alert("Song title needed", "Enter your song title first.");
+      Alert.alert("Song title needed", "Enter a title first.");
       return;
     }
 
     if (!user) {
-      Alert.alert("Sign in required", "You must sign in before publishing.");
+      Alert.alert("Sign in required", "Sign in before publishing a song.");
+      setScreen("Profile");
       return;
     }
 
@@ -141,24 +192,25 @@ export default function App() {
     try {
       const { error } = await supabase.from("songs").insert({
         title: title.trim(),
-        genre: genre.trim(),
+        genre: genre.trim() || "Music",
         description: description.trim(),
         user_id: user.id,
+        artist_name: email.split("@")[0] || "VoiceStar artist",
       });
 
-      if (error) {
-        Alert.alert("Could not publish", error.message);
-        return;
-      }
+      if (error) throw error;
 
-      Alert.alert("Success", "Your song has been published.");
+      Alert.alert("Published", "Your song has been saved.");
       setTitle("");
       setGenre("Afrobeats");
       setDescription("");
       await loadSongs();
       setScreen("Home");
     } catch (error) {
-      Alert.alert("Error", error.message || "Please try again.");
+      Alert.alert(
+        "Could not publish",
+        error.message || "Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -166,327 +218,556 @@ export default function App() {
 
   const filteredSongs = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return songs;
 
-    return songs.filter((song) => {
-      const haystack = `${song.title} ${song.artist} ${song.genre}`.toLowerCase();
-      return haystack.includes(term);
-    });
+    return songs.filter((song) =>
+      `${song.title} ${song.artist} ${song.genre}`
+        .toLowerCase()
+        .includes(term)
+    );
   }, [songs, search]);
 
-  function renderSong(song) {
+  function Button({ label, onPress, secondary = false }) {
     return (
-      <View key={song.id} style={styles.card}>
-        <View style={styles.musicIcon}>
-          <Text style={{ color: COLORS.white, fontSize: 24 }}>♫</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>{song.title}</Text>
-          <Text style={styles.muted}>
-            {song.artist} · {song.genre}
-          </Text>
-        </View>
-        <Text style={{ color: COLORS.pink }}>•••</Text>
-      </View>
+      <TouchableOpacity
+        style={[styles.button, secondary && styles.secondary]}
+        onPress={onPress}
+      >
+        <Text style={styles.buttonText}>{label}</Text>
+      </TouchableOpacity>
     );
   }
 
-  function HomeScreen() {
+  function Panel({ children }) {
+    return <View style={styles.panel}>{children}</View>;
+  }
+
+  function Heading({ children }) {
+    return <Text style={styles.heading}>{children}</Text>;
+  }
+
+  function Field({ label, value, onChangeText, placeholder, multiline }) {
     return (
       <>
-        <View style={styles.hero}>
+        <Text style={styles.label}>{label}</Text>
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={C.muted}
+          multiline={multiline}
+          style={[styles.input, multiline && { minHeight: 90 }]}
+        />
+      </>
+    );
+  }
+
+  function SongCard({ song }) {
+    return (
+      <Panel>
+        <View style={styles.row}>
+          <View style={styles.musicIcon}>
+            <Text style={{ color: C.white, fontSize: 24 }}>♫</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>{song.title}</Text>
+            <Text style={styles.muted}>
+              {song.artist} · {song.genre}
+            </Text>
+          </View>
+        </View>
+      </Panel>
+    );
+  }
+
+  function Home() {
+    return (
+      <>
+        <Panel>
           <Text style={styles.pink}>YOUR VOICE. YOUR STAGE.</Text>
           <Text style={styles.heroTitle}>Let the world hear you.</Text>
           <Text style={styles.muted}>
-            Share your music, find your audience, and grow your sound.
+            Sing, discover artists, meet your community and grow your sound.
           </Text>
+          <Button label="＋ Create music" onPress={() => setScreen("Studio")} />
+          <Button label="🎤 Enter Stage" onPress={() => setScreen("Stage")} />
+          <Button label="♧ Find Groups" onPress={() => setScreen("Groups")} secondary />
+        </Panel>
 
-          <View style={styles.row}>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => setScreen("Studio")}
-            >
-              <Text style={styles.primaryButtonText}>＋ Create music</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => setScreen("Discover")}
-            >
-              <Text style={styles.primaryButtonText}>⌕ Discover</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <Text style={styles.section}>Trending voices</Text>
-        {filteredSongs.map(renderSong)}
+        <Heading>Trending voices</Heading>
+        {filteredSongs.map((song) => (
+          <SongCard key={song.id} song={song} />
+        ))}
       </>
     );
   }
 
-  function DiscoverScreen() {
+  function Discover() {
     return (
       <>
-        <Text style={styles.section}>Discover</Text>
-        <TextInput
+        <Heading>Discover music</Heading>
+        <Field
+          label="SEARCH"
           value={search}
           onChangeText={setSearch}
-          placeholder="Search songs and artists"
-          placeholderTextColor={COLORS.muted}
-          style={styles.input}
+          placeholder="Search songs, genres or artists"
         />
-        {filteredSongs.map(renderSong)}
+        {filteredSongs.map((song) => (
+          <SongCard key={song.id} song={song} />
+        ))}
+        {!filteredSongs.length && (
+          <Text style={styles.muted}>No matching songs found.</Text>
+        )}
       </>
     );
   }
 
-  function StudioScreen() {
+  function Studio() {
     return (
       <>
-        <Text style={styles.section}>Artist Studio</Text>
+        <Heading>Artist Studio</Heading>
+        <Panel>
+          <Text style={styles.pink}>CREATE YOUR NEXT HIT</Text>
+          <Field label="SONG TITLE" value={title} onChangeText={setTitle} placeholder="Enter song title" />
+          <Field label="GENRE" value={genre} onChangeText={setGenre} placeholder="Afrobeats, Gospel, R&B..." />
+          <Field label="DESCRIPTION" value={description} onChangeText={setDescription} placeholder="Tell us about your song" multiline />
+          <Button
+            label={loading ? "Publishing..." : "Publish Song ↗"}
+            onPress={publishSong}
+          />
+        </Panel>
 
-        <Text style={styles.label}>SONG TITLE</Text>
-        <TextInput
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Enter song title"
-          placeholderTextColor={COLORS.muted}
-          style={styles.input}
-        />
+        <Heading>Vocal effects controls</Heading>
+        <Panel>
+          <Text style={styles.muted}>
+            These controls are a prototype interface. They do not process audio
+            until the recording and audio-effects engine is connected.
+          </Text>
 
-        <Text style={styles.label}>GENRE</Text>
-        <TextInput
-          value={genre}
-          onChangeText={setGenre}
-          placeholder="Afrobeats, R&B, Gospel..."
-          placeholderTextColor={COLORS.muted}
-          style={styles.input}
-        />
-
-        <Text style={styles.label}>DESCRIPTION</Text>
-        <TextInput
-          value={description}
-          onChangeText={setDescription}
-          placeholder="Tell listeners about your song"
-          placeholderTextColor={COLORS.muted}
-          multiline
-          style={[styles.input, { minHeight: 100 }]}
-        />
-
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={publishSong}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.primaryButtonText}>Publish Song ↗</Text>
-          )}
-        </TouchableOpacity>
+          {Object.keys(effects).map((name) => (
+            <View key={name} style={{ marginTop: 15 }}>
+              <View style={styles.row}>
+                <Text style={styles.cardTitle}>
+                  {name === "Pitch" ? "Pitch correction" : name}
+                </Text>
+                <Text style={styles.pink}>{effects[name]}</Text>
+              </View>
+              <View style={styles.row}>
+                <Button
+                  label="−"
+                  secondary
+                  onPress={() =>
+                    setEffects((old) => ({
+                      ...old,
+                      [name]: Math.max(name === "Pitch" ? -12 : 0, old[name] - 5),
+                    }))
+                  }
+                />
+                <Button
+                  label="+"
+                  onPress={() =>
+                    setEffects((old) => ({
+                      ...old,
+                      [name]: Math.min(name === "Pitch" ? 12 : 100, old[name] + 5),
+                    }))
+                  }
+                />
+              </View>
+            </View>
+          ))}
+          <Button
+            label="Reset effects"
+            secondary
+            onPress={() =>
+              setEffects({
+                Reverb: 30,
+                Echo: 10,
+                Bass: 50,
+                Treble: 50,
+                Compression: 30,
+                Pitch: 0,
+              })
+            }
+          />
+        </Panel>
       </>
     );
   }
 
-  function ProfileScreen() {
+  function Stage() {
     return (
       <>
-        <Text style={styles.section}>Profile</Text>
+        <Heading>Live Stage</Heading>
+        <Panel>
+          <Text style={styles.pink}>● STAGE ROOM</Text>
+          <Text style={styles.heroTitle}>
+            {room?.name || "VoiceStar Open Mic"}
+          </Text>
+          <Text style={styles.muted}>
+            {room
+              ? "Room created on this device. Live streaming is not connected yet."
+              : "Create a room or join a seat to try the stage interface."}
+          </Text>
 
-        <View style={styles.hero}>
+          <Field
+            label="ROOM NAME"
+            value={roomName}
+            onChangeText={setRoomName}
+            placeholder="e.g. Afrobeat Freestyle"
+          />
+          <Button
+            label="＋ Create Stage Room"
+            onPress={() => {
+              const name = roomName.trim();
+              if (!name) {
+                Alert.alert("Room name", "Enter a room name first.");
+                return;
+              }
+
+              setRoom({ name });
+              setSeats([]);
+              setRoomName("");
+              Alert.alert("Room created", "Your demo stage room is ready.");
+            }}
+          />
+        </Panel>
+
+        <Heading>Artist seats</Heading>
+        <View style={styles.seatGrid}>
+          {Array.from({ length: 8 }, (_, i) => {
+            const occupied = seats.includes(i);
+            return (
+              <TouchableOpacity
+                key={i}
+                style={[styles.seat, occupied && styles.seatActive]}
+                onPress={() => {
+                  if (!room) {
+                    Alert.alert("Join a room", "Create a stage room first.");
+                    return;
+                  }
+
+                  setSeats((old) =>
+                    occupied ? old.filter((seat) => seat !== i) : [...old, i]
+                  );
+                }}
+              >
+                <Text style={styles.seatText}>
+                  {occupied ? "🎤" : `Seat ${i + 1}`}
+                </Text>
+                <Text style={styles.muted}>
+                  {occupied ? "You" : "Available"}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Panel>
+          <Heading>Room interactions</Heading>
+          <Text style={styles.muted}>
+            Seats, gifts and sample chat work locally in this prototype.
+            Real guests need a shared backend and live audio service.
+          </Text>
+          <View style={styles.row}>
+            <Button
+              label="❤️ Like"
+              onPress={() =>
+                Alert.alert("Liked", "Your demo reaction was recorded locally.")
+              }
+            />
+            <Button
+              label="🎁 Send gift"
+              onPress={() => {
+                setGifts((old) => old + 1);
+                Alert.alert("Demo gift", "One local demo gift added.");
+              }}
+              secondary
+            />
+          </View>
+          <Button label="Open Chat" onPress={() => setScreen("Chat")} />
+        </Panel>
+      </>
+    );
+  }
+
+  function Chat() {
+    return (
+      <>
+        <Heading>Community Chat</Heading>
+        <Panel>
+          {messages.map((message) => (
+            <View key={message.id} style={styles.chatBubble}>
+              <Text style={styles.pink}>{message.sender}</Text>
+              <Text style={styles.cardTitle}>{message.text}</Text>
+            </View>
+          ))}
+
+          <TextInput
+            value={chatMessage}
+            onChangeText={setChatMessage}
+            placeholder="Write a message..."
+            placeholderTextColor={C.muted}
+            style={styles.input}
+          />
+          <Button
+            label="Send message"
+            onPress={() => {
+              const text = chatMessage.trim();
+              if (!text) return;
+
+              setMessages((old) => [
+                ...old,
+                {
+                  id: `${Date.now()}`,
+                  sender: email ? email.split("@")[0] : "Guest",
+                  text,
+                },
+              ]);
+              setChatMessage("");
+            }}
+          />
+          <Text style={styles.muted}>
+            Messages currently stay on this device; shared chat is not
+            connected yet.
+          </Text>
+        </Panel>
+      </>
+    );
+  }
+
+  function Groups() {
+    return (
+      <>
+        <Heading>Groups & Families</Heading>
+        <Panel>
+          <Text style={styles.muted}>
+            Create a local demo community. Online membership and invitations
+            require backend tables and permissions.
+          </Text>
+          <Field
+            label="GROUP OR FAMILY NAME"
+            value={groupName}
+            onChangeText={setGroupName}
+            placeholder="Enter a name"
+          />
+          <Button
+            label="＋ Create Group"
+            onPress={() => {
+              const name = groupName.trim();
+              if (!name) {
+                Alert.alert("Name required", "Enter a group name.");
+                return;
+              }
+
+              setGroups((old) => [...old, { id: `${Date.now()}`, name }]);
+              setGroupName("");
+            }}
+          />
+        </Panel>
+
+        <Heading>Your communities</Heading>
+        {groups.length === 0 ? (
+          <Text style={styles.muted}>No groups created on this device yet.</Text>
+        ) : (
+          groups.map((group) => (
+            <Panel key={group.id}>
+              <Text style={styles.cardTitle}>♧ {group.name}</Text>
+              <Text style={styles.muted}>Created locally · 1 demo member</Text>
+            </Panel>
+          ))
+        )}
+      </>
+    );
+  }
+
+  function Tasks() {
+    return (
+      <>
+        <Heading>Tasks & Rewards</Heading>
+        <Panel>
+          <Text style={styles.heroTitle}>{xp} XP</Text>
+          <Text style={styles.muted}>Demo experience points earned on this device</Text>
+          <Text style={styles.cardTitle}>🎁 Demo gifts: {gifts}</Text>
+        </Panel>
+
+        {tasks.map((task) => (
+          <Panel key={task.id}>
+            <Text style={styles.cardTitle}>{task.title}</Text>
+            <Text style={styles.muted}>Reward: {task.reward} XP</Text>
+            <Button
+              label={task.done ? "Completed ✓" : "Complete demo task"}
+              secondary={task.done}
+              onPress={() => {
+                if (task.done) return;
+
+                setTasks((old) =>
+                  old.map((item) =>
+                    item.id === task.id ? { ...item, done: true } : item
+                  )
+                );
+                setXp((old) => old + task.reward);
+                Alert.alert("Task complete", `You earned ${task.reward} demo XP.`);
+              }}
+            />
+          </Panel>
+        ))}
+
+        <Text style={styles.muted}>
+          XP and gifts here are prototypes, not transferable currency. Real
+          rewards need server-side validation to prevent cheating.
+        </Text>
+      </>
+    );
+  }
+
+  function Profile() {
+    return (
+      <>
+        <Heading>Artist Profile</Heading>
+        <Panel>
           <Text style={styles.heroTitle}>
             {email ? email.split("@")[0] : "New Voice"}
           </Text>
-
           <Text style={styles.muted}>
-            {email || "You are not signed in yet."}
+            {email || "Sign in to publish your music."}
           </Text>
+          <Text style={styles.cardTitle}>Experience: {xp} demo XP</Text>
+          <Text style={styles.cardTitle}>Demo gifts: {gifts}</Text>
 
-          {!email ? (
+          {!user ? (
             <>
-              <TextInput
+              <Field
+                label="EMAIL ADDRESS"
                 value={authEmail}
                 onChangeText={setAuthEmail}
                 placeholder="Enter your email"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                placeholderTextColor={COLORS.muted}
-                style={[styles.input, { marginTop: 16 }]}
               />
-
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handleSignIn}
-                disabled={authLoading}
-              >
-                {authLoading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Sign in with email</Text>
-                )}
-              </TouchableOpacity>
+              <Button
+                label={authLoading ? "Please wait..." : "Sign in with email"}
+                onPress={signIn}
+              />
+              {authLoading && (
+                <ActivityIndicator color={C.purple} style={{ marginTop: 12 }} />
+              )}
             </>
           ) : (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={handleSignOut}
-            >
-              <Text style={styles.primaryButtonText}>Sign out</Text>
-            </TouchableOpacity>
+            <Button label="Sign out" secondary onPress={signOut} />
           )}
-        </View>
+        </Panel>
       </>
     );
   }
 
-  const screens = {
-    Home: HomeScreen,
-    Discover: DiscoverScreen,
-    Studio: StudioScreen,
-    Profile: ProfileScreen,
+  const screenContent = {
+    Home: <Home />,
+    Discover: <Discover />,
+    Studio: <Studio />,
+    Stage: <Stage />,
+    Chat: <Chat />,
+    Groups: <Groups />,
+    Tasks: <Tasks />,
+    Profile: <Profile />,
   };
-
-  const CurrentScreen = screens[screen] || HomeScreen;
 
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
+      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
 
       <View style={styles.header}>
         <View>
           <Text style={styles.brand}>
-            VOICE<Text style={{ color: COLORS.pink }}>STAR</Text> ✦
+            VOICE<Text style={{ color: C.pink }}>STAR</Text> ✦
           </Text>
           <Text style={styles.tagline}>YOUR VOICE. YOUR STAGE.</Text>
         </View>
-        <Text style={{ color: COLORS.purple, fontSize: 24 }}>♫</Text>
+        <Text style={{ fontSize: 24, color: C.purple }}>♫</Text>
       </View>
 
       <ScrollView
+        key={screen}
         style={{ flex: 1 }}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <CurrentScreen />
+        {screenContent[screen] || <Home />}
       </ScrollView>
 
-      <View style={styles.nav}>
-        {['Home', 'Discover', 'Studio', 'Profile'].map((item) => (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.nav}
+        contentContainerStyle={styles.navContent}
+      >
+        {tabs.map(([name, symbol]) => (
           <TouchableOpacity
-            key={item}
-            style={styles.navItem}
-            onPress={() => setScreen(item)}
+            key={name}
+            style={[styles.navItem, screen === name && styles.navActive]}
+            onPress={() => setScreen(name)}
           >
-            <Text
-              style={[
-                styles.navText,
-                screen === item && { color: COLORS.pink },
-              ]}
-            >
-              {item === 'Home' ? '⌂' : item === 'Discover' ? '⌕' : item === 'Studio' ? '＋' : '♙'}
+            <Text style={[styles.navIcon, screen === name && styles.activeText]}>
+              {symbol}
             </Text>
-            <Text
-              style={[
-                styles.navLabel,
-                screen === item && { color: COLORS.pink },
-              ]}
-            >
-              {item}
+            <Text style={[styles.navLabel, screen === name && styles.activeText]}>
+              {name}
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.bg },
+  safe: { flex: 1, backgroundColor: C.bg },
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  brand: {
-    color: COLORS.white,
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  tagline: {
-    color: COLORS.muted,
-    fontSize: 9,
-    letterSpacing: 2,
-  },
-  content: { paddingHorizontal: 20, paddingBottom: 20 },
-  hero: {
-    backgroundColor: COLORS.panel,
+  brand: { color: C.white, fontSize: 22, fontWeight: "900" },
+  tagline: { color: C.muted, fontSize: 9, letterSpacing: 2 },
+  content: { paddingHorizontal: 16, paddingBottom: 24 },
+  panel: {
+    backgroundColor: C.panel,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
+    borderColor: C.border,
+    borderRadius: 16,
+    padding: 15,
+    marginBottom: 12,
   },
   heroTitle: {
-    color: COLORS.white,
-    fontSize: 30,
+    color: C.white,
+    fontSize: 27,
     fontWeight: "900",
     marginVertical: 8,
   },
-  pink: {
-    color: COLORS.pink,
-    fontWeight: "800",
-    marginBottom: 8,
-  },
-  muted: {
-    color: COLORS.muted,
-    fontSize: 12,
-    marginTop: 4,
-  },
-  section: {
-    color: COLORS.white,
+  pink: { color: C.pink, fontWeight: "800", marginBottom: 6 },
+  muted: { color: C.muted, fontSize: 12, marginTop: 4, lineHeight: 19 },
+  heading: {
+    color: C.white,
     fontSize: 18,
     fontWeight: "800",
+    marginTop: 8,
     marginBottom: 12,
   },
   row: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     gap: 10,
-    marginTop: 16,
+    marginVertical: 5,
   },
-  primaryButton: {
-    backgroundColor: COLORS.purple,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    alignItems: "center",
+  button: {
     flex: 1,
-  },
-  secondaryButton: {
-    backgroundColor: "#251834",
+    backgroundColor: C.purple,
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    borderRadius: 11,
     alignItems: "center",
-    flex: 1,
+    marginTop: 10,
   },
-  primaryButtonText: {
-    color: COLORS.white,
-    fontWeight: "800",
-  },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: COLORS.panel,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 14,
-    marginBottom: 10,
-  },
+  secondary: { backgroundColor: "#30203F", borderWidth: 1, borderColor: C.border },
+  buttonText: { color: C.white, fontWeight: "800", fontSize: 12 },
   musicIcon: {
     width: 48,
     height: 48,
@@ -495,37 +776,64 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  cardTitle: {
-    color: COLORS.white,
-    fontSize: 13,
-    fontWeight: "800",
-  },
+  cardTitle: { color: C.white, fontSize: 13, fontWeight: "800" },
   label: {
-    color: COLORS.muted,
+    color: C.muted,
     fontSize: 10,
     fontWeight: "900",
-    marginBottom: 7,
     marginTop: 12,
+    marginBottom: 6,
   },
   input: {
-    backgroundColor: COLORS.panel,
-    borderRadius: 12,
+    backgroundColor: "#100C19",
     borderWidth: 1,
-    borderColor: COLORS.border,
-    color: COLORS.white,
-    padding: 14,
-    marginBottom: 12,
+    borderColor: C.border,
+    borderRadius: 11,
+    padding: 13,
+    color: C.white,
+    marginTop: 5,
+    marginBottom: 8,
+    minHeight: 46,
+  },
+  seatGrid: { flexDirection: "row", flexWrap: "wrap", gap: 9, marginBottom: 14 },
+  seat: {
+    width: "48%",
+    minHeight: 78,
+    padding: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: C.panel,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  seatActive: { borderColor: C.pink, backgroundColor: "#30152E" },
+  seatText: { color: C.white, fontWeight: "800" },
+  chatBubble: {
+    backgroundColor: "#21162E",
+    borderRadius: 10,
+    padding: 12,
+    marginVertical: 5,
   },
   nav: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    backgroundColor: "#100B19",
+    flexGrow: 0,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 10,
-    paddingBottom: 8,
+    borderTopColor: C.border,
+    backgroundColor: "#100B18",
   },
-  navItem: { alignItems: "center", minWidth: 60 },
-  navText: { color: COLORS.muted, fontSize: 21 },
-  navLabel: { color: COLORS.muted, fontSize: 9, marginTop: 3 },
+  navContent: { paddingHorizontal: 4, alignItems: "center" },
+  navItem: {
+    minWidth: 68,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+  },
+  navActive: {
+    borderTopWidth: 2,
+    borderTopColor: C.pink,
+  },
+  navIcon: { color: C.muted, fontSize: 19 },
+  navLabel: { color: C.muted, fontSize: 10, marginTop: 3 },
+  activeText: { color: C.pink, fontWeight: "900" },
 });
