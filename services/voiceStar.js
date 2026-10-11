@@ -1,53 +1,80 @@
+import { supabase } from "../lib/supabase";
 
-import { supabase } from '../lib/supabase';
+/**
 
-async function requireUser() {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+* VoiceStar database service
+  */
 
-  if (error) throw error;
-
-  if (!user) {
-    throw new Error('Please sign in to continue.');
-  }
-
-  return user;
+function handleError(error) {
+if (error) {
+throw new Error(error.message || "VoiceStar request failed.");
+}
 }
 
-export async function getMyCoinWallet() {
-  const user = await requireUser();
+/** Get the signed-in user */
+export async function getCurrentUser() {
+const { data, error } = await supabase.auth.getUser();
+handleError(error);
 
-  const { data, error } = await supabase
-    .from('coin_wallets')
-    .select('user_id, balance, updated_at')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (error) throw error;
-
-  return data;
+if (!data.user) {
+throw new Error("Please sign in to continue.");
 }
 
-export async function getMyCoinLedger(limit = 50) {
-  const user = await requireUser();
+return data.user;
+}
 
-  const safeLimit = Math.max(
-    1,
-    Math.min(Number(limit) || 50, 100)
-  );
+/** Get an artist profile */
+export async function getArtistProfile(userId) {
+if (!userId) {
+throw new Error("User ID is required.");
+}
 
-  const { data, error } = await supabase
-    .from('coin_ledger')
-    .select(
-      'id, user_id, delta, entry_type, reference_id, description, created_at'
-    )
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(safeLimit);
+const { data, error } = await supabase
+.from("profiles")
+.select("*")
+.eq("id", userId)
+.maybeSingle();
 
-  if (error) throw error;
+handleError(error);
+return data;
+}
 
-  return data || [];
+/** Load live rooms /
+export async function getLiveRooms() {
+const { data, error } = await supabase
+.from("live_rooms")
+.select("");
+
+handleError(error);
+return data ?? [];
+}
+
+/** Load notifications for the signed-in user */
+export async function getMyNotifications() {
+const user = await getCurrentUser();
+
+const { data, error } = await supabase
+.from("notifications")
+.select("*")
+.eq("user_id", user.id);
+
+handleError(error);
+return data ?? [];
+}
+
+/** Load followers for an artist */
+export async function getArtistFollowers(userId) {
+if (!userId) {
+throw new Error("Artist ID is required.");
+}
+
+const { data, error } = await supabase
+.from("follows")
+.select("*");
+
+handleError(error);
+
+return (data ?? []).filter(
+(follow) => follow.following_id === userId
+);
 }
