@@ -1,4 +1,21 @@
 
+import { supabase } from '../lib/supabase';
+
+async function requireUser() {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error) throw error;
+
+  if (!user) {
+    throw new Error('Please sign in to continue.');
+  }
+
+  return user;
+}
+
 export async function getMyCoinWallet() {
   const user = await requireUser();
 
@@ -9,6 +26,7 @@ export async function getMyCoinWallet() {
     .maybeSingle();
 
   if (error) throw error;
+
   return data;
 }
 
@@ -30,5 +48,6 @@ export async function getMyCoinLedger(limit = 50) {
     .limit(safeLimit);
 
   if (error) throw error;
+
   return data || [];
 }
