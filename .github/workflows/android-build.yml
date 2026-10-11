@@ -1,65 +1,72 @@
-
 name: VoiceStar Android APK Build
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+workflow_dispatch:
+push:
+branches:
+- main
 
 permissions:
-  contents: read
+contents: read
 
 concurrency:
-  group: voicestar-android-${{ github.ref }}
-  cancel-in-progress: true
+group: voicestar-android-${{ github.ref }}
+cancel-in-progress: true
 
 jobs:
-  build-android:
-    name: Build VoiceStar APK
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+build-android:
+name: Build VoiceStar APK
+runs-on: ubuntu-latest
+timeout-minutes: 45
 
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+steps:
+  - name: Check out repository
+    uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+  - name: Set up Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: 22
+      package-manager-cache: false
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+  - name: Set up Java 17
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: '17'
 
-      - name: Install project dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+  - name: Check package files
+    run: |
+      echo "Checking VoiceStar project files..."
+      test -f package.json || {
+        echo "ERROR: package.json is missing."
+        exit 1
+      }
 
-      - name: Check Expo project configuration
-        run: npx expo config --type public
+  - name: Install project dependencies
+    run: |
+      if [ -f package-lock.json ]; then
+        npm ci
+      else
+        npm install
+      fi
 
-      - name: Generate Android project
-        run: npx expo prebuild --platform android --non-interactive
+  - name: Check Expo configuration
+    run: npx expo config --type public
 
-      - name: Build release APK
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+  - name: Generate Android project
+    run: npx expo prebuild --platform android --non-interactive
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: VoiceStar-Android-APK
-          path: android/app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
-          retention-days: 14
-  
+  - name: Build release APK
+    working-directory: android
+    run: |
+      chmod +x gradlew
+      ./gradlew assembleRelease --no-daemon
+
+  - name: Upload Android APK
+    uses: actions/upload-artifact@v4
+    with:
+      name: VoiceStar-Android-APK
+      path: android/app/build/outputs/apk/release/*.apk
+      if-no-files-found: error
+      retention-days: 14
