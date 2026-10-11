@@ -1,13 +1,8 @@
-
 import { supabase } from "../lib/supabase";
 
-// ------------------------------
-// Shared helpers
-// ------------------------------
-
-function checkError(error) {
-  if (error) throw error;
-}
+// ================================
+// VOICESTAR SERVICE
+// ================================
 
 async function requireUser() {
   const {
@@ -15,7 +10,7 @@ async function requireUser() {
     error,
   } = await supabase.auth.getUser();
 
-  checkError(error);
+  if (error) throw error;
 
   if (!user) {
     throw new Error("Please sign in to continue.");
@@ -24,12 +19,12 @@ async function requireUser() {
   return user;
 }
 
-// ------------------------------
-// PROFILES
-// ------------------------------
+// ================================
+// USER PROFILE
+// ================================
 
 export async function getCurrentUser() {
-  return await requireUser();
+  return requireUser();
 }
 
 export async function getArtistProfile(userId) {
@@ -41,7 +36,7 @@ export async function getArtistProfile(userId) {
     .eq("id", userId)
     .maybeSingle();
 
-  checkError(error);
+  if (error) throw error;
   return data;
 }
 
@@ -58,13 +53,13 @@ export async function updateMyProfile(updates) {
   const cleanUpdates = {};
 
   for (const field of allowedFields) {
-    if (Object.prototype.hasOwnProperty.call(updates, field)) {
+    if (updates[field] !== undefined) {
       cleanUpdates[field] = updates[field];
     }
   }
 
   if (Object.keys(cleanUpdates).length === 0) {
-    throw new Error("Enter profile details to update.");
+    throw new Error("No valid profile fields provided.");
   }
 
   const { data, error } = await supabase
@@ -74,24 +69,24 @@ export async function updateMyProfile(updates) {
     .select()
     .single();
 
-  checkError(error);
+  if (error) throw error;
   return data;
 }
 
-// ------------------------------
-// SONGS AND HOME FEED
-// ------------------------------
+// ================================
+// SONGS
+// ================================
 
 export async function getSongs(limit = 30) {
   const { data, error } = await supabase
     .from("songs")
     .select("*")
-    .eq("visibility", "public")
     .eq("status", "published")
+    .eq("visibility", "public")
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  checkError(error);
+  if (error) throw error;
   return data ?? [];
 }
 
@@ -101,61 +96,65 @@ export async function getArtistSongs(artistId) {
   const { data, error } = await supabase
     .from("songs")
     .select("*")
-    .eq("artist_id", artistId)
-    .eq("status", "published")
+    .eq("user_id", artistId)
     .order("created_at", { ascending: false });
 
-  checkError(error);
+  if (error) throw error;
   return data ?? [];
 }
 
-export async function publishSong({
-  title,
-  genre,
-  description = "",
-  cover_url = null,
-  audio_url,
-  hashtags = [],
-  visibility = "public",
-}) {
+export async function publishSong(song) {
   const user = await requireUser();
 
-  if (!title?.trim()) {
-    throw new Error("Enter a song title.");
+  if (!song?.title?.trim()) {
+    throw new Error("Please enter a song title.");
   }
 
-  if (!audio_url) {
-    throw new Error("Upload or save your song audio first.");
+  if (!song?.audio_url?.trim()) {
+    throw new Error("Please provide the uploaded song audio URL.");
   }
 
-  if (!["public", "private"].includes(visibility)) {
-    throw new Error("Visibility must be public or private.");
-  }
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("username, display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError) throw profileError;
+
+  const artistName =
+    profile?.display_name ||
+    profile?.username ||
+    user.email?.split("@")[0] ||
+    "VoiceStar Artist";
+
+  const songData = {
+    user_id: user.id,
+    artist_id: user.id,
+    artist_name: artistName,
+    title: song.title.trim(),
+    audio_url: song.audio_url.trim(),
+    genre: song.genre || null,
+    cover_url: song.cover_url || null,
+    description: song.description || null,
+    hashtags: Array.isArray(song.hashtags) ? song.hashtags : [],
+    visibility: song.visibility === "private" ? "private" : "public",
+    status: "published",
+  };
 
   const { data, error } = await supabase
     .from("songs")
-    .insert({
-      user_id: user.id,
-      artist_id: user.id,
-      title: title.trim(),
-      genre: genre || null,
-      description,
-      cover_url,
-      audio_url,
-      hashtags,
-      visibility,
-      status: "published",
-    })
+    .insert(songData)
     .select()
     .single();
 
-  checkError(error);
+  if (error) throw error;
   return data;
 }
 
-// ------------------------------
+// ================================
 // LIVE ROOMS
-// ------------------------------
+// ================================
 
 export async function getLiveRooms() {
   const { data, error } = await supabase
@@ -164,18 +163,15 @@ export async function getLiveRooms() {
     .eq("status", "live")
     .order("created_at", { ascending: false });
 
-  checkError(error);
+  if (error) throw error;
   return data ?? [];
 }
 
-export async function createLiveRoom({
-  title,
-  livekit_room = null,
-}) {
+export async function createLiveRoom(title, livekitRoom = null) {
   const user = await requireUser();
 
   if (!title?.trim()) {
-    throw new Error("Enter a room title.");
+    throw new Error("Please enter a live room title.");
   }
 
   const { data, error } = await supabase
@@ -185,12 +181,12 @@ export async function createLiveRoom({
       title: title.trim(),
       status: "live",
       viewer_count: 0,
-      livekit_room,
+      livekit_room: livekitRoom,
     })
     .select()
     .single();
 
-  checkError(error);
+  if (error) throw error;
   return data;
 }
 
@@ -210,13 +206,13 @@ export async function endLiveRoom(roomId) {
     .select()
     .single();
 
-  checkError(error);
+  if (error) throw error;
   return data;
 }
 
-// ------------------------------
+// ================================
 // FOLLOWERS
-// ------------------------------
+// ================================
 
 export async function getArtistFollowers(artistId) {
   if (!artistId) throw new Error("Artist ID is required.");
@@ -226,19 +222,19 @@ export async function getArtistFollowers(artistId) {
     .select("*")
     .eq("following_id", artistId);
 
-  checkError(error);
+  if (error) throw error;
   return data ?? [];
 }
 
 export async function getFollowing(userId) {
-  if (!userId) throw new Error("User ID is required.");
+  const id = userId || (await requireUser()).id;
 
   const { data, error } = await supabase
     .from("follows")
     .select("*")
-    .eq("follower_id", userId);
+    .eq("follower_id", id);
 
-  checkError(error);
+  if (error) throw error;
   return data ?? [];
 }
 
@@ -251,15 +247,23 @@ export async function followArtist(artistId) {
     throw new Error("You cannot follow yourself.");
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("follows")
     .insert({
       follower_id: user.id,
       following_id: artistId,
-    });
+    })
+    .select()
+    .single();
 
-  checkError(error);
-  return true;
+  if (error) {
+    if (error.code === "23505") {
+      return { alreadyFollowing: true };
+    }
+    throw error;
+  }
+
+  return data;
 }
 
 export async function unfollowArtist(artistId) {
@@ -273,28 +277,36 @@ export async function unfollowArtist(artistId) {
     .eq("follower_id", user.id)
     .eq("following_id", artistId);
 
-  checkError(error);
+  if (error) throw error;
   return true;
 }
 
-// ------------------------------
+// ================================
 // SONG LIKES
-// ------------------------------
+// ================================
 
 export async function likeSong(songId) {
   const user = await requireUser();
 
   if (!songId) throw new Error("Song ID is required.");
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("likes")
     .insert({
       user_id: user.id,
       song_id: songId,
-    });
+    })
+    .select()
+    .single();
 
-  checkError(error);
-  return true;
+  if (error) {
+    if (error.code === "23505") {
+      return { alreadyLiked: true };
+    }
+    throw error;
+  }
+
+  return data;
 }
 
 export async function unlikeSong(songId) {
@@ -308,13 +320,13 @@ export async function unlikeSong(songId) {
     .eq("user_id", user.id)
     .eq("song_id", songId);
 
-  checkError(error);
+  if (error) throw error;
   return true;
 }
 
-// ------------------------------
-// COMMENTS
-// ------------------------------
+// ================================
+// SONG COMMENTS
+// ================================
 
 export async function getSongComments(songId) {
   if (!songId) throw new Error("Song ID is required.");
@@ -325,7 +337,7 @@ export async function getSongComments(songId) {
     .eq("song_id", songId)
     .order("created_at", { ascending: true });
 
-  checkError(error);
+  if (error) throw error;
   return data ?? [];
 }
 
@@ -333,7 +345,10 @@ export async function addSongComment(songId, text) {
   const user = await requireUser();
 
   if (!songId) throw new Error("Song ID is required.");
-  if (!text?.trim()) throw new Error("Write a comment first.");
+
+  if (!text?.trim()) {
+    throw new Error("Please enter a comment.");
+  }
 
   const { data, error } = await supabase
     .from("comments")
@@ -345,13 +360,13 @@ export async function addSongComment(songId, text) {
     .select()
     .single();
 
-  checkError(error);
+  if (error) throw error;
   return data;
 }
 
-// ------------------------------
+// ================================
 // NOTIFICATIONS
-// ------------------------------
+// ================================
 
 export async function getMyNotifications() {
   const user = await requireUser();
@@ -362,7 +377,7 @@ export async function getMyNotifications() {
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
-  checkError(error);
+  if (error) throw error;
   return data ?? [];
 }
 
@@ -375,29 +390,28 @@ export async function markNotificationRead(notificationId) {
 
   const { data, error } = await supabase
     .from("notifications")
-    .update({
-      read_at: new Date().toISOString(),
-    })
+    .update({ read_at: new Date().toISOString() })
     .eq("id", notificationId)
     .eq("user_id", user.id)
     .select()
     .single();
 
-  checkError(error);
+  if (error) throw error;
   return data;
 }
 
-// ------------------------------
+// ================================
 // ACHIEVEMENTS
-// ------------------------------
+// ================================
 
 export async function getAchievements() {
   const { data, error } = await supabase
     .from("achievements")
     .select("*")
-    .eq("active", true);
+    .eq("active", true)
+    .order("threshold", { ascending: true });
 
-  checkError(error);
+  if (error) throw error;
   return data ?? [];
 }
 
@@ -406,9 +420,42 @@ export async function getMyAchievements() {
 
   const { data, error } = await supabase
     .from("user_achievements")
-    .select("*")
-    .eq("user_id", user.id);
+    .select("*, achievements(*)")
+    .eq("user_id", user.id)
+    .order("earned_at", { ascending: false });
 
-  checkError(error);
+  if (error) throw error;
   return data ?? [];
 }
+
+// ================================
+// COIN WALLET
+// ================================
+
+export async function getMyCoinWallet() {
+  const user = await requireUser();
+
+  const { data, error } = await supabase
+    .from("coin_wallets")
+    .select("*")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data ?? { user_id: user.id, balance: 0 };
+}
+
+export async function getMyCoinLedger(limit = 50) {
+  const user = await requireUser();
+
+  const { data, error } = await supabase
+    .from("coin_ledger")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data ?? [];
+    }
