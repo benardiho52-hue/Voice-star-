@@ -35,6 +35,9 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
       - name: Check project files
         run: |
           test -f package.json || {
@@ -68,4 +71,4 @@ jobs:
           name: VoiceStar-Android-APK
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
-          retention-days: 14concurrency: 
+          retention-days: 14
