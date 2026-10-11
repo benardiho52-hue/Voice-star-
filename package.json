@@ -9,7 +9,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "doctor": "expo-doctor"
+    "typecheck": "expo install --check",
+    "build:android": "eas build --platform android"
   },
   "dependencies": {
     "expo": "~54.0.0",
@@ -20,6 +21,6 @@
     "react-native": "0.81.4"
   },
   "devDependencies": {
-    "expo-doctor": "^1.17.0"
+    "eas-cli": "^16.0.0"
   }
 }
