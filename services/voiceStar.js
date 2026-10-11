@@ -12,24 +12,45 @@ export async function getCurrentUser() {
   return data.user;
 }
 
-export async function getArtistProfile(userId) {
+// Get an artist profile
+export async function getArtistProfile(profileId) {
+  if (!profileId) {
+    throw new Error("Profile ID is required.");
+  }
+
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", userId)
+    .eq("id", profileId)
     .maybeSingle();
 
   checkError(error);
   return data;
 }
 
-export async function updateArtistProfile(userId, updates) {
-  const allowed = ["username", "display_name", "bio", "avatar_url"];
+// Update a profile using columns in schema.sql
+export async function updateArtistProfile(profileId, updates) {
+  if (!profileId) {
+    throw new Error("Profile ID is required.");
+  }
+
+  const allowed = [
+    "full_name",
+    "artist_name",
+    "bio",
+    "avatar_url",
+    "is_private",
+  ];
+
   const safeUpdates = Object.fromEntries(
     Object.entries(updates || {}).filter(([key]) =>
       allowed.includes(key)
     )
   );
+
+  if (Object.keys(safeUpdates).length === 0) {
+    throw new Error("No valid profile fields provided.");
+  }
 
   const { data, error } = await supabase
     .from("profiles")
@@ -37,7 +58,7 @@ export async function updateArtistProfile(userId, updates) {
       ...safeUpdates,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", userId)
+    .eq("id", profileId)
     .select()
     .single();
 
@@ -45,12 +66,12 @@ export async function updateArtistProfile(userId, updates) {
   return data;
 }
 
+// Get published songs
 export async function getSongs(limit = 20) {
   const { data, error } = await supabase
     .from("songs")
     .select("*")
-    .eq("status", "published")
-    .eq("visibility", "public")
+    .eq("is_published", true)
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -58,6 +79,7 @@ export async function getSongs(limit = 20) {
   return data ?? [];
 }
 
+// Publish a song
 export async function publishSong(song) {
   const user = await getCurrentUser();
 
@@ -65,28 +87,52 @@ export async function publishSong(song) {
     throw new Error("Please sign in before publishing.");
   }
 
+  if (!song?.title || !(song.audio_url || song.audioUrl)) {
+    throw new Error("Song title and audio URL are required.");
+  }
+
+  // Find the existing profile belonging to this signed-in user.
+  let profileQuery = supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", user.id);
+
+  let { data: profile, error: profileError } =
+    await profileQuery.maybeSingle();
+
+  checkError(profileError);
+
+  // Some existing schemas store a different profile UUID.
+  if (!profile && user.email) {
+    const result = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("email", user.email)
+      .maybeSingle();
+
+    checkError(result.error);
+    profile = result.data;
+  }
+
+  if (!profile) {
+    throw new Error(
+      "Artist profile not found. Create your profile before publishing."
+    );
+  }
+
   const payload = {
+    profile_id: profile.id,
     title: song.title,
-    audio_url: song.audio_url ?? song.audioUrl,
-    user_id: user.id,
-    artist_id: user.id,
     artist_name:
       song.artist_name ??
       song.artistName ??
       "VoiceStar Artist",
     genre: song.genre ?? "Afrobeats",
-    cover_url: song.cover_url ?? song.coverUrl ?? null,
-    visibility: song.visibility ?? "public",
-    status: song.status ?? "published",
     description: song.description ?? "",
-    hashtags: Array.isArray(song.hashtags)
-      ? song.hashtags
-      : [],
+    audio_url: song.audio_url ?? song.audioUrl,
+    cover_url: song.cover_url ?? song.coverUrl ?? null,
+    is_published: true,
   };
-
-  if (!payload.title || !payload.audio_url) {
-    throw new Error("Song title and audio URL are required.");
-  }
 
   const { data, error } = await supabase
     .from("songs")
@@ -98,56 +144,69 @@ export async function publishSong(song) {
   return data;
 }
 
-export async function followArtist(followerId, artistId) {
-  if (!followerId || !artistId) {
-    throw new Error("Both user IDs are required.");
-  }
-
-  if (followerId === artistId) {
-    throw new Error("You cannot follow yourself.");
+// Follow an artist
+// artistId must be the ID from the artists table.
+export async function followArtist(profileId, artistId) {
+  if (!profileId || !artistId) {
+    throw new Error("Profile ID and artist ID are required.");
   }
 
   const { error } = await supabase
-    .from("follows")
+    .from("followers")
     .upsert(
       {
-        follower_id: followerId,
-        following_id: artistId,
+        profile_id: profileId,
+        artist_id: artistId,
       },
-      { onConflict: "follower_id,following_id" }
+      {
+        onConflict: "profile_id,artist_id",
+      }
     );
 
   checkError(error);
 }
 
-export async function unfollowArtist(followerId, artistId) {
+// Unfollow an artist
+export async function unfollowArtist(profileId, artistId) {
+  if (!profileId || !artistId) {
+    throw new Error("Profile ID and artist ID are required.");
+  }
+
   const { error } = await supabase
-    .from("follows")
+    .from("followers")
     .delete()
-    .eq("follower_id", followerId)
-    .eq("following_id", artistId);
+    .eq("profile_id", profileId)
+    .eq("artist_id", artistId);
 
   checkError(error);
 }
 
+// Get live rooms
 export async function getLiveRooms() {
   const { data, error } = await supabase
     .from("live_rooms")
     .select("*")
-    .eq("status", "live")
+    .eq("is_live", true)
     .order("created_at", { ascending: false });
 
   checkError(error);
   return data ?? [];
 }
 
-export async function getTasks() {
-  const { data, error } = await supabase
+// Get incomplete tasks
+export async function getTasks(profileId) {
+  let query = supabase
     .from("tasks")
     .select("*")
-    .eq("is_active", true)
+    .eq("completed", false)
     .order("created_at", { ascending: false });
+
+  if (profileId) {
+    query = query.eq("profile_id", profileId);
+  }
+
+  const { data, error } = await query;
 
   checkError(error);
   return data ?? [];
-}
+                    }
