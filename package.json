@@ -1,3 +1,4 @@
+
 {
   "name": "voice-star",
   "version": "1.0.0",
@@ -6,17 +7,15 @@
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
-    "web": "expo start --web",
-    "check": "npx expo-doctor",
-    "test:bundle": "expo export --platform android",
-    "build:android:apk": "expo prebuild --platform android --clean && cd android && ./gradlew assembleRelease"
+    "ios": "expo start --ios",
+    "web": "expo start --web"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.0",
-    "expo": "~57.0.27",
-    "expo-status-bar": "~3.0.0",
-    "react": "19.2.3",
-    "react-native": "0.86.3",
-    "react-native-url-polyfill": "^2.0.0"
+    "expo": "~54.0.0",
+    "expo-audio": "~1.1.1",
+    "expo-file-system": "~19.0.24",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.4"
   }
 }
