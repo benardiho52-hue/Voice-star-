@@ -350,3 +350,340 @@ export default function App() {
       </View>
     </ScrollView>
   );
+
+  const Discover = () => (
+    <ScrollView>
+      <Text style={styles.pageTitle}>Discover ✨</Text>
+      <Text style={styles.muted}>
+        Discover songs released on your stage.
+      </Text>
+      {songs.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.tileIcon}>♫</Text>
+          <Text style={styles.songTitle}>No songs yet</Text>
+          <Text style={styles.muted}>
+            Your songs will appear here when you add them.
+          </Text>
+        </View>
+      ) : (
+        songs.map((song) => (
+          <SongCard key={song.id} song={song} />
+        ))
+      )}
+      <Button
+        label="Publish a Song"
+        onPress={() => setTab("Publish")}
+      />
+    </ScrollView>
+  );
+  const Profile = () => (
+    <ScrollView>
+      <Text style={styles.pageTitle}>Artist Profile 🌟</Text>
+      <View style={styles.panel}>
+        <Text style={styles.tileIcon}>🎤</Text>
+        <Text style={styles.heroTitle}>
+          {artist.trim() || "New Artist"}
+        </Text>
+        <Text style={styles.muted}>
+          Your VoiceStar artist profile
+        </Text>
+        <Text style={styles.small}>Genre: {genre}</Text>
+        <Text style={styles.small}>
+          Test releases: {songs.length}
+        </Text>
+        <Button
+          label="Publish a Song"
+          onPress={() => setTab("Publish")}
+        />
+        <Button
+          label="Open Music Player"
+          onPress={() => setTab("Player")}
+          secondary
+        />
+      </View>
+    </ScrollView>
+  );
+
+  const renderScreen = () => {
+    if (tab === "Studio") return <Studio />;
+    if (tab === "Player") return <Player />;
+    if (tab === "Publish") return <Publish />;
+    if (tab === "Discover") return <Discover />;
+    if (tab === "Profile") return <Profile />;
+    return <Home />;
+  };
+
+  const navItems = [
+    { name: "Home", icon: "⌂" },
+    { name: "Discover", icon: "⌕" },
+    { name: "Studio", icon: "♫" },
+    { name: "Profile", icon: "◎" },
+  ];
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor={C.bg}
+      />
+
+      <View style={styles.appHeader}>
+        <View>
+          <Text style={styles.brand}>
+            Voice<Text style={styles.brandAccent}>Star</Text>
+          </Text>
+          <Text style={styles.tagline}>
+            Your stage, your voice, your star power!
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => setTab("Publish")}
+        >
+          <Text style={styles.headerButtonText}>＋</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.screen}>
+        {renderScreen()}
+      </View>
+
+      <View style={styles.bottomNav}>
+        {navItems.map((item) => (
+          <TouchableOpacity
+            key={item.name}
+            accessibilityRole="button"
+            onPress={() => setTab(item.name)}
+            style={styles.navItem}
+          >
+            <Text
+              style={[
+                styles.navIcon,
+                tab === item.name && styles.navActive,
+              ]}
+            >
+              {item.icon}
+            </Text>
+            <Text
+              style={[
+                styles.navLabel,
+                tab === item.name && styles.navActive,
+              ]}
+            >
+              {item.name}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: C.bg },
+  screen: { flex: 1, paddingHorizontal: 16, paddingTop: 10 },
+  appHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2A2038",
+  },
+  brand: {
+    color: C.white,
+    fontSize: 25,
+    fontWeight: "900",
+  },
+  brandAccent: { color: C.pink },
+  tagline: { color: C.muted, fontSize: 10, marginTop: 3 },
+  headerButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: C.purple,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerButtonText: { color: C.white, fontSize: 28 },
+  hero: {
+    backgroundColor: C.panel,
+    borderRadius: 22,
+    padding: 20,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "#39234D",
+  },
+  eyebrow: {
+    color: C.pink,
+    fontSize: 11,
+    fontWeight: "800",
+    marginBottom: 10,
+  },
+  heroTitle: {
+    color: C.white,
+    fontSize: 25,
+    fontWeight: "900",
+    marginBottom: 10,
+  },
+  pageTitle: {
+    color: C.white,
+    fontSize: 25,
+    fontWeight: "900",
+    marginVertical: 10,
+  },
+  sectionTitle: {
+    color: C.white,
+    fontSize: 17,
+    fontWeight: "800",
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  muted: {
+    color: C.muted,
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  small: {
+    color: C.muted,
+    fontSize: 11,
+    marginVertical: 5,
+  },
+  panel: {
+    backgroundColor: C.panel,
+    borderRadius: 18,
+    padding: 16,
+    marginVertical: 12,
+    borderWidth: 1,
+    borderColor: "#30223F",
+  },
+  button: {
+    backgroundColor: C.purple,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderRadius: 13,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  secondaryButton: {
+    backgroundColor: C.panel2,
+    borderWidth: 1,
+    borderColor: C.pink,
+  },
+  buttonText: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  grid: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 14,
+  },
+  tile: {
+    flex: 1,
+    minHeight: 125,
+    backgroundColor: C.panel,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#30223F",
+  },
+  tileIcon: { color: C.pink, fontSize: 26, marginBottom: 8 },
+  tileTitle: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "800",
+    marginBottom: 5,
+  },
+  empty: {
+    alignItems: "center",
+    backgroundColor: C.panel,
+    padding: 24,
+    borderRadius: 18,
+    marginTop: 8,
+  },
+  songCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: C.panel,
+    borderRadius: 15,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#30223F",
+  },
+  songIcon: {
+    color: C.pink,
+    fontSize: 25,
+    width: 32,
+    textAlign: "center",
+  },
+  songTitle: {
+    color: C.white,
+    fontSize: 15,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  label: {
+    color: C.white,
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: "#0E0A17",
+    color: C.white,
+    borderWidth: 1,
+    borderColor: "#3A2A4D",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 14,
+  },
+  multiline: { minHeight: 88, textAlignVertical: "top" },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginVertical: 5,
+  },
+  chip: {
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: C.panel2,
+    borderWidth: 1,
+    borderColor: "#3A2A4D",
+  },
+  selectedChip: {
+    backgroundColor: "#5D267C",
+    borderColor: C.pink,
+  },
+  chipText: {
+    color: C.white,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  bottomNav: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    backgroundColor: "#181024",
+    borderTopWidth: 1,
+    borderTopColor: "#30223F",
+    paddingVertical: 8,
+  },
+  navItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 4,
+  },
+  navIcon: { color: C.muted, fontSize: 21, marginBottom: 2 },
+  navLabel: { color: C.muted, fontSize: 10, fontWeight: "700" },
+  navActive: { color: C.pink },
+});
