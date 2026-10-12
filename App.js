@@ -111,13 +111,55 @@ export default function App() {
   };
 
   
-  const publishSong = () => {
-    if (!title.trim()) {
-      Alert.alert("Song title needed", "Enter your song title first.");
-      return;
-    }
 
-    const song = {
+   const publishSong = async () => {
+if (!title.trim()) {
+Alert.alert("Error", "Enter a song title.");
+return;
+}
+
+try {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    Alert.alert("Sign in required", "Sign in before publishing.");
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("songs")
+    .insert({
+      artist_id: user.id,
+      user_id: user.id,
+      title: title.trim(),
+      artist_name: artist.trim() || "New Artist",
+      genre,
+      description: description.trim(),
+      visibility: visibility.toLowerCase(),
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  setSongs((old) => [{
+    id: data.id,
+    title: data.title,
+    artist: data.artist_name,
+    genre: data.genre,
+    description: data.description || "",
+    visibility: data.visibility,
+  }, ...old]);
+
+  setTitle("");
+  setDescription("");
+  setTab("Home");
+  Alert.alert("Success", "Song saved online!");
+} catch (e) {
+  Alert.alert("Publishing failed", e.message);
+}
+
+     const song = {
       id: Date.now().toString(),
       title: title.trim(),
       artist: artist.trim() || "New Artist",
