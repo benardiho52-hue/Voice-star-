@@ -10,6 +10,7 @@ import {
   StatusBar,
   StyleSheet,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import {
   AudioModule,
@@ -18,6 +19,7 @@ import {
   useAudioRecorder,
   useAudioPlayer,
 } from "expo-audio";
+import { supabase } from "./lib/supabase";
 
 const C = {
   bg: "#090711",
@@ -40,6 +42,7 @@ export default function App() {
   const [recordingUri, setRecordingUri] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const recorder = useAudioRecorder(
     RecordingPresets.HIGH_QUALITY
@@ -53,7 +56,7 @@ export default function App() {
 
       if (!permission.granted) {
         Alert.alert(
-          "Microphone permission needed",
+          "Microphone permission",
           "Allow VoiceStar to use your microphone."
         );
         return;
@@ -68,9 +71,9 @@ export default function App() {
       recorder.record();
       setIsRecording(true);
       setIsPlaying(false);
-      Alert.alert("Recording started", "Sing your song now!");
-    } catch (error) {
-      Alert.alert("Recording error", String(error));
+      Alert.alert("Recording", "Sing your song now!");
+    } catch (e) {
+      Alert.alert("Recording error", e.message);
     }
   };
 
@@ -79,13 +82,14 @@ export default function App() {
       await recorder.stop();
       setRecordingUri(recorder.uri);
       setIsRecording(false);
+      await setAudioModeAsync({ playsInSilentMode: true });
       Alert.alert(
         "Recording saved",
-        "Your recording is ready to preview."
+        "You can now preview your vocals."
       );
-    } catch (error) {
+    } catch (e) {
       setIsRecording(false);
-      Alert.alert("Recording error", String(error));
+      Alert.alert("Recording error", e.message);
     }
   };
 
@@ -100,8 +104,8 @@ export default function App() {
       await player.replace({ uri: recordingUri });
       player.play();
       setIsPlaying(true);
-    } catch (error) {
-      Alert.alert("Playback error", String(error));
+    } catch (e) {
+      Alert.alert("Playback error", e.message);
     }
   };
 
@@ -110,82 +114,95 @@ export default function App() {
     setIsPlaying(false);
   };
 
-  
+  const publishSong = async () => {
+    if (saving) return;
 
-   const publishSong = async () => {
-if (!title.trim()) {
-Alert.alert("Error", "Enter a song title.");
-return;
-}
+    if (!title.trim()) {
+      Alert.alert("Song title needed", "Enter your song title.");
+      return;
+    }
 
-try {
-  const { data: { user } } = await supabase.auth.getUser();
+    setSaving(true);
 
-  if (!user) {
-    Alert.alert("Sign in required", "Sign in before publishing.");
-    return;
-  }
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-  const { data, error } = await supabase
-    .from("songs")
-    .insert({
-      artist_id: user.id,
-      user_id: user.id,
-      title: title.trim(),
-      artist_name: artist.trim() || "New Artist",
-      genre,
-      description: description.trim(),
-      visibility: visibility.toLowerCase(),
-    })
-    .select()
-    .single();
+      if (authError) throw authError;
 
-  if (error) throw error;
+      if (!user) {
+        Alert.alert(
+          "Sign in required",
+          "Sign in to your VoiceStar account before publishing."
+        );
+        return;
+      }
 
-  setSongs((old) => [{
-    id: data.id,
-    title: data.title,
-    artist: data.artist_name,
-    genre: data.genre,
-    description: data.description || "",
-    visibility: data.visibility,
-  }, ...old]);
+      const songData = {
+        title: title.trim(),
+        artist_name: artist.trim() || "New Artist",
+        genre,
+        description: description.trim(),
+        audio_url: null,
+        cover_url: null,
+        is_published: visibility === "Public",
+      };
 
-  setTitle("");
-  setDescription("");
-  setTab("Home");
-  Alert.alert("Success", "Song saved online!");
-} catch (e) {
-  Alert.alert("Publishing failed", e.message);
-}
+      const { data, error } = await supabase
+        .from("songs")
+        .insert(songData)
+        .select()
+        .single();
 
-     const song = {
-      id: Date.now().toString(),
-      title: title.trim(),
-      artist: artist.trim() || "New Artist",
-      genre,
-      description: description.trim(),
-      visibility,
-      audioUri: recordingUri,
-    };
+      if (error) throw error;
 
-    setSongs((previous) => [song, ...previous]);
-    setTitle("");
-    setDescription("");
-    setTab("Home");
+      const savedSong = {
+        id: data.id,
+        title: data.title,
+        artist: data.artist_name,
+        genre: data.genre,
+        description: data.description || "",
+        visibility: data.is_published ? "Public" : "Private",
+        audioUri: recordingUri,
+      };
 
-    Alert.alert(
-      "Test song added",
-      recordingUri
-        ? "Song details and local recording are linked. Audio has not been uploaded online."
-        : "Song details are saved for this test. Record vocals in Studio to attach audio."
-    );
+      setSongs((previous) => [savedSong, ...previous]);
+      setTitle("");
+      setDescription("");
+      setTab("Home");
+
+      Alert.alert(
+        "Song saved!",
+        recordingUri
+          ? "Song details are online. Your recording is still on this device and has not been uploaded."
+          : "Your song details have been saved to Supabase."
+      );
+    } catch (e) {
+      Alert.alert(
+        "Publishing failed",
+        e.message || "Please check your connection and database settings."
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const Button = ({ label, onPress, secondary = false }) => (
+  const Button = ({
+    label,
+    onPress,
+    secondary = false,
+    disabled = false,
+  }) => (
     <TouchableOpacity
+      disabled={disabled}
       onPress={onPress}
-      style={[styles.button, secondary && styles.secondaryButton]}
+      style={[
+        styles.button,
+        secondary && styles.secondaryButton,
+        disabled && styles.disabledButton,
+      ]}
     >
       <Text style={styles.buttonText}>{label}</Text>
     </TouchableOpacity>
@@ -200,14 +217,15 @@ try {
           {song.artist} · {song.genre}
         </Text>
         <Text style={styles.small}>
-          {song.visibility} · {song.audioUri ? "Audio attached" : "No audio"}
+          {song.visibility || "Saved"} ·{" "}
+          {song.audioUri ? "Recording on device" : "No audio uploaded"}
         </Text>
       </View>
     </View>
   );
 
   const Home = () => (
-    <ScrollView>
+    <ScrollView showsVerticalScrollIndicator={false}>
       <View style={styles.hero}>
         <Text style={styles.eyebrow}>WELCOME TO YOUR STAGE</Text>
         <Text style={styles.heroTitle}>
@@ -216,34 +234,49 @@ try {
         <Text style={styles.muted}>
           Record music, share your sound, and get ready to shine.
         </Text>
-        <Button label="＋ Publish a Song" onPress={() => setTab("Publish")} />
+        <Button
+          label="＋ Publish a Song"
+          onPress={() => setTab("Publish")}
+        />
       </View>
 
       <Text style={styles.sectionTitle}>Your Studio</Text>
       <View style={styles.grid}>
-        <TouchableOpacity style={styles.tile} onPress={() => setTab("Studio")}>
+        <TouchableOpacity
+          style={styles.tile}
+          onPress={() => setTab("Studio")}
+        >
           <Text style={styles.tileIcon}>🎙️</Text>
           <Text style={styles.tileTitle}>Artist Studio</Text>
           <Text style={styles.muted}>Record your vocals</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tile} onPress={() => setTab("Player")}>
+
+        <TouchableOpacity
+          style={styles.tile}
+          onPress={() => setTab("Player")}
+        >
           <Text style={styles.tileIcon}>🎧</Text>
           <Text style={styles.tileTitle}>Music Player</Text>
-          <Text style={styles.muted}>Your test songs</Text>
+          <Text style={styles.muted}>Preview your recordings</Text>
         </TouchableOpacity>
       </View>
 
       <Text style={styles.sectionTitle}>
-        Your Test Releases ({songs.length})
+        Your Songs ({songs.length})
       </Text>
+
       {songs.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.tileIcon}>♫</Text>
           <Text style={styles.songTitle}>Your stage is waiting</Text>
-          <Text style={styles.muted}>Publish a test song to see it here.</Text>
+          <Text style={styles.muted}>
+            Publish a song to begin building your catalogue.
+          </Text>
         </View>
       ) : (
-        songs.map((song) => <SongCard key={song.id} song={song} />)
+        songs.map((song) => (
+          <SongCard key={song.id} song={song} />
+        ))
       )}
     </ScrollView>
   );
@@ -251,16 +284,18 @@ try {
   const Studio = () => (
     <ScrollView>
       <Text style={styles.pageTitle}>Artist Studio 🎙️</Text>
-      <Text style={styles.muted}>Record your voice and preview it.</Text>
+      <Text style={styles.muted}>
+        Record your voice and preview your performance.
+      </Text>
 
       <View style={styles.panel}>
         <Text style={styles.sectionTitle}>Voice Recording</Text>
-        <Text style={styles.muted}>
-          Allow microphone permission when your phone asks.
-        </Text>
 
         {!isRecording ? (
-          <Button label="● Start Recording" onPress={startRecording} />
+          <Button
+            label="● Start Recording"
+            onPress={startRecording}
+          />
         ) : (
           <Button
             label="■ Stop Recording"
@@ -271,7 +306,13 @@ try {
 
         {recordingUri && !isRecording && (
           <>
-            <Button label="▶ Play Recording" onPress={playRecording} />
+            <Text style={styles.small}>
+              Your latest recording is ready.
+            </Text>
+            <Button
+              label="▶ Play Recording"
+              onPress={playRecording}
+            />
             {isPlaying && (
               <Button
                 label="■ Stop Playback"
@@ -291,7 +332,8 @@ try {
       <View style={styles.panel}>
         <Text style={styles.sectionTitle}>Mix Studio</Text>
         <Text style={styles.muted}>
-          Reverb, echo, bass, treble, and pitch correction will be added next.
+          Audio effects, reverb, echo, bass, treble, and pitch
+          correction require a separate audio-processing implementation.
         </Text>
       </View>
     </ScrollView>
@@ -300,10 +342,14 @@ try {
   const Player = () => (
     <ScrollView>
       <Text style={styles.pageTitle}>Music Player 🎧</Text>
+
       {recordingUri && (
         <View style={styles.panel}>
-          <Text style={styles.songTitle}>Your Latest Recording</Text>
-          <Button label="▶ Play Recording" onPress={playRecording} />
+          <Text style={styles.songTitle}>Latest Recording</Text>
+          <Button
+            label="▶ Play Recording"
+            onPress={playRecording}
+          />
           {isPlaying && (
             <Button
               label="■ Stop Playback"
@@ -314,11 +360,14 @@ try {
         </View>
       )}
 
-      <Text style={styles.sectionTitle}>Available Test Songs</Text>
+      <Text style={styles.sectionTitle}>Song Catalogue</Text>
+
       {songs.length === 0 ? (
-        <Text style={styles.muted}>No songs added yet.</Text>
+        <Text style={styles.muted}>No songs saved yet.</Text>
       ) : (
-        songs.map((song) => <SongCard key={song.id} song={song} />)
+        songs.map((song) => (
+          <SongCard key={song.id} song={song} />
+        ))
       )}
     </ScrollView>
   );
@@ -326,7 +375,9 @@ try {
   const Publish = () => (
     <ScrollView keyboardShouldPersistTaps="handled">
       <Text style={styles.pageTitle}>Publish Song ✨</Text>
-      <Text style={styles.muted}>Prepare your song for testing.</Text>
+      <Text style={styles.muted}>
+        Prepare your song for VoiceStar.
+      </Text>
 
       <View style={styles.panel}>
         <Text style={styles.label}>Song Title *</Text>
@@ -353,7 +404,10 @@ try {
             <TouchableOpacity
               key={item}
               onPress={() => setGenre(item)}
-              style={[styles.chip, genre === item && styles.selectedChip]}
+              style={[
+                styles.chip,
+                genre === item && styles.selectedChip,
+              ]}
             >
               <Text style={styles.chipText}>{item}</Text>
             </TouchableOpacity>
@@ -376,7 +430,10 @@ try {
             <TouchableOpacity
               key={item}
               onPress={() => setVisibility(item)}
-              style={[styles.chip, visibility === item && styles.selectedChip]}
+              style={[
+                styles.chip,
+                visibility === item && styles.selectedChip,
+              ]}
             >
               <Text style={styles.chipText}>{item}</Text>
             </TouchableOpacity>
@@ -385,10 +442,22 @@ try {
 
         <Text style={styles.small}>
           {recordingUri
-            ? "A local recording is ready to attach."
-            : "No recording attached. You can record one in Studio."}
+            ? "Recording ready on your device; it will not be uploaded yet."
+            : "You can record vocals in Artist Studio."}
         </Text>
-        <Button label="Save Test Song" onPress={publishSong} />
+
+        <Button
+          label={saving ? "Saving Song..." : "Save Song Online"}
+          onPress={publishSong}
+          disabled={saving}
+        />
+
+        {saving && (
+          <ActivityIndicator
+            color={C.pink}
+            style={{ marginTop: 12 }}
+          />
+        )}
       </View>
     </ScrollView>
   );
@@ -397,27 +466,32 @@ try {
     <ScrollView>
       <Text style={styles.pageTitle}>Discover ✨</Text>
       <Text style={styles.muted}>
-        Discover songs released on your stage.
+        Explore songs added during this app session.
       </Text>
-      {songs.length === 0 ? (
+
+      {songs.filter((s) => s.visibility === "Public").length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.tileIcon}>♫</Text>
-          <Text style={styles.songTitle}>No songs yet</Text>
+          <Text style={styles.songTitle}>Discover new sounds</Text>
           <Text style={styles.muted}>
-            Your songs will appear here when you add them.
+            Public songs will appear here when loaded.
           </Text>
         </View>
       ) : (
-        songs.map((song) => (
-          <SongCard key={song.id} song={song} />
-        ))
+        songs
+          .filter((s) => s.visibility === "Public")
+          .map((song) => (
+            <SongCard key={song.id} song={song} />
+          ))
       )}
+
       <Button
         label="Publish a Song"
         onPress={() => setTab("Publish")}
       />
     </ScrollView>
   );
+
   const Profile = () => (
     <ScrollView>
       <Text style={styles.pageTitle}>Artist Profile 🌟</Text>
@@ -426,13 +500,9 @@ try {
         <Text style={styles.heroTitle}>
           {artist.trim() || "New Artist"}
         </Text>
-        <Text style={styles.muted}>
-          Your VoiceStar artist profile
-        </Text>
+        <Text style={styles.muted}>Your VoiceStar artist profile</Text>
         <Text style={styles.small}>Genre: {genre}</Text>
-        <Text style={styles.small}>
-          Test releases: {songs.length}
-        </Text>
+        <Text style={styles.small}>Songs this session: {songs.length}</Text>
         <Button
           label="Publish a Song"
           onPress={() => setTab("Publish")}
@@ -447,12 +517,20 @@ try {
   );
 
   const renderScreen = () => {
-    if (tab === "Studio") return <Studio />;
-    if (tab === "Player") return <Player />;
-    if (tab === "Publish") return <Publish />;
-    if (tab === "Discover") return <Discover />;
-    if (tab === "Profile") return <Profile />;
-    return <Home />;
+    switch (tab) {
+      case "Studio":
+        return <Studio />;
+      case "Player":
+        return <Player />;
+      case "Publish":
+        return <Publish />;
+      case "Discover":
+        return <Discover />;
+      case "Profile":
+        return <Profile />;
+      default:
+        return <Home />;
+    }
   };
 
   const navItems = [
@@ -478,6 +556,7 @@ try {
             Your stage, your voice, your star power!
           </Text>
         </View>
+
         <TouchableOpacity
           style={styles.headerButton}
           onPress={() => setTab("Publish")}
@@ -486,9 +565,7 @@ try {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.screen}>
-        {renderScreen()}
-      </View>
+      <View style={styles.screen}>{renderScreen()}</View>
 
       <View style={styles.bottomNav}>
         {navItems.map((item) => (
@@ -522,8 +599,15 @@ try {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.bg },
-  screen: { flex: 1, paddingHorizontal: 16, paddingTop: 10 },
+  safe: {
+    flex: 1,
+    backgroundColor: C.bg,
+  },
+  screen: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
   appHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -538,8 +622,14 @@ const styles = StyleSheet.create({
     fontSize: 25,
     fontWeight: "900",
   },
-  brandAccent: { color: C.pink },
-  tagline: { color: C.muted, fontSize: 10, marginTop: 3 },
+  brandAccent: {
+    color: C.pink,
+  },
+  tagline: {
+    color: C.muted,
+    fontSize: 10,
+    marginTop: 3,
+  },
   headerButton: {
     width: 42,
     height: 42,
@@ -548,7 +638,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  headerButtonText: { color: C.white, fontSize: 28 },
+  headerButtonText: {
+    color: C.white,
+    fontSize: 28,
+  },
   hero: {
     backgroundColor: C.panel,
     borderRadius: 22,
@@ -614,6 +707,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.pink,
   },
+  disabledButton: {
+    opacity: 0.6,
+  },
   buttonText: {
     color: C.white,
     fontSize: 14,
@@ -633,7 +729,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#30223F",
   },
-  tileIcon: { color: C.pink, fontSize: 26, marginBottom: 8 },
+  tileIcon: {
+    color: C.pink,
+    fontSize: 26,
+    marginBottom: 8,
+  },
   tileTitle: {
     color: C.white,
     fontSize: 14,
@@ -687,7 +787,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 14,
   },
-  multiline: { minHeight: 88, textAlignVertical: "top" },
+  multiline: {
+    minHeight: 88,
+    textAlignVertical: "top",
+  },
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -725,7 +828,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 4,
   },
-  navIcon: { color: C.muted, fontSize: 21, marginBottom: 2 },
-  navLabel: { color: C.muted, fontSize: 10, fontWeight: "700" },
-  navActive: { color: C.pink },
+  navIcon: {
+    color: C.muted,
+    fontSize: 21,
+    marginBottom: 2,
+  },
+  navLabel: {
+    color: C.muted,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  navActive: {
+    color: C.pink,
+  },
 });
