@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   SafeAreaView,
   View,
@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import {
   AudioModule,
@@ -43,11 +44,44 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const recorder = useAudioRecorder(
-    RecordingPresets.HIGH_QUALITY
-  );
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const player = useAudioPlayer();
+
+  const loadSongs = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("songs")
+        .select("id, title, artist_name, genre, description, is_published")
+        .eq("is_published", true)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      setSongs(
+        (data || []).map((song) => ({
+          id: song.id,
+          title: song.title,
+          artist: song.artist_name || "New Artist",
+          genre: song.genre || "Afrobeats",
+          description: song.description || "",
+          visibility: "Public",
+          audioUri: null,
+        }))
+      );
+    } catch (error) {
+      console.log("Song loading:", error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSongs();
+  }, [loadSongs]);
 
   const startRecording = async () => {
     try {
@@ -57,7 +91,7 @@ export default function App() {
       if (!permission.granted) {
         Alert.alert(
           "Microphone permission",
-          "Allow VoiceStar to use your microphone."
+          "Allow VoiceStar to access your microphone in your phone settings."
         );
         return;
       }
@@ -71,9 +105,8 @@ export default function App() {
       recorder.record();
       setIsRecording(true);
       setIsPlaying(false);
-      Alert.alert("Recording", "Sing your song now!");
-    } catch (e) {
-      Alert.alert("Recording error", e.message);
+    } catch (error) {
+      Alert.alert("Recording error", error.message);
     }
   };
 
@@ -82,14 +115,18 @@ export default function App() {
       await recorder.stop();
       setRecordingUri(recorder.uri);
       setIsRecording(false);
-      await setAudioModeAsync({ playsInSilentMode: true });
+
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+      });
+
       Alert.alert(
         "Recording saved",
-        "You can now preview your vocals."
+        "Your recording is on this device. You can preview it before publishing."
       );
-    } catch (e) {
+    } catch (error) {
       setIsRecording(false);
-      Alert.alert("Recording error", e.message);
+      Alert.alert("Recording error", error.message);
     }
   };
 
@@ -100,12 +137,15 @@ export default function App() {
     }
 
     try {
-      await setAudioModeAsync({ playsInSilentMode: true });
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+      });
+
       await player.replace({ uri: recordingUri });
       player.play();
       setIsPlaying(true);
-    } catch (e) {
-      Alert.alert("Playback error", e.message);
+    } catch (error) {
+      Alert.alert("Playback error", error.message);
     }
   };
 
@@ -118,7 +158,7 @@ export default function App() {
     if (saving) return;
 
     if (!title.trim()) {
-      Alert.alert("Song title needed", "Enter your song title.");
+      Alert.alert("Song title needed", "Enter your song title first.");
       return;
     }
 
@@ -135,7 +175,7 @@ export default function App() {
       if (!user) {
         Alert.alert(
           "Sign in required",
-          "Sign in to your VoiceStar account before publishing."
+          "Publishing requires a signed-in VoiceStar account. Sign-in must be configured before you can publish."
         );
         return;
       }
@@ -153,36 +193,42 @@ export default function App() {
       const { data, error } = await supabase
         .from("songs")
         .insert(songData)
-        .select()
+        .select(
+          "id, title, artist_name, genre, description, is_published"
+        )
         .single();
 
       if (error) throw error;
 
-      const savedSong = {
+      const newSong = {
         id: data.id,
         title: data.title,
-        artist: data.artist_name,
-        genre: data.genre,
+        artist: data.artist_name || "New Artist",
+        genre: data.genre || "Afrobeats",
         description: data.description || "",
         visibility: data.is_published ? "Public" : "Private",
         audioUri: recordingUri,
       };
 
-      setSongs((previous) => [savedSong, ...previous]);
+      setSongs((previous) => [
+        newSong,
+        ...previous.filter((song) => song.id !== newSong.id),
+      ]);
+
       setTitle("");
       setDescription("");
       setTab("Home");
 
       Alert.alert(
-        "Song saved!",
+        "Song details saved",
         recordingUri
-          ? "Song details are online. Your recording is still on this device and has not been uploaded."
-          : "Your song details have been saved to Supabase."
+          ? "Your song details are online. Your audio recording is still on this device and has not been uploaded."
+          : "Your song details have been saved. No audio file was uploaded."
       );
-    } catch (e) {
+    } catch (error) {
       Alert.alert(
         "Publishing failed",
-        e.message || "Please check your connection and database settings."
+        error.message || "Check your internet connection and database permissions."
       );
     } finally {
       setSaving(false);
@@ -196,8 +242,9 @@ export default function App() {
     disabled = false,
   }) => (
     <TouchableOpacity
-      disabled={disabled}
       onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
       style={[
         styles.button,
         secondary && styles.secondaryButton,
@@ -217,15 +264,27 @@ export default function App() {
           {song.artist} · {song.genre}
         </Text>
         <Text style={styles.small}>
-          {song.visibility || "Saved"} ·{" "}
-          {song.audioUri ? "Recording on device" : "No audio uploaded"}
+          {song.visibility || "Public"}
+          {" · "}
+          {song.audioUri
+            ? "Recording on this device"
+            : "Audio not uploaded"}
         </Text>
       </View>
     </View>
   );
 
   const Home = () => (
-    <ScrollView showsVerticalScrollIndicator={false}>
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={loading}
+          onRefresh={loadSongs}
+          tintColor={C.pink}
+        />
+      }
+    >
       <View style={styles.hero}>
         <Text style={styles.eyebrow}>WELCOME TO YOUR STAGE</Text>
         <Text style={styles.heroTitle}>
@@ -235,12 +294,13 @@ export default function App() {
           Record music, share your sound, and get ready to shine.
         </Text>
         <Button
-          label="＋ Publish a Song"
+          label="+ Publish a Song"
           onPress={() => setTab("Publish")}
         />
       </View>
 
       <Text style={styles.sectionTitle}>Your Studio</Text>
+
       <View style={styles.grid}>
         <TouchableOpacity
           style={styles.tile}
@@ -257,26 +317,29 @@ export default function App() {
         >
           <Text style={styles.tileIcon}>🎧</Text>
           <Text style={styles.tileTitle}>Music Player</Text>
-          <Text style={styles.muted}>Preview your recordings</Text>
+          <Text style={styles.muted}>Preview recordings</Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionTitle}>
-        Your Songs ({songs.length})
-      </Text>
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitle}>Public Songs</Text>
+        <TouchableOpacity onPress={loadSongs}>
+          <Text style={styles.refreshText}>Refresh</Text>
+        </TouchableOpacity>
+      </View>
 
-      {songs.length === 0 ? (
+      {songs.filter((s) => s.visibility === "Public").length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.tileIcon}>♫</Text>
           <Text style={styles.songTitle}>Your stage is waiting</Text>
           <Text style={styles.muted}>
-            Publish a song to begin building your catalogue.
+            Published songs will appear here.
           </Text>
         </View>
       ) : (
-        songs.map((song) => (
-          <SongCard key={song.id} song={song} />
-        ))
+        songs
+          .filter((s) => s.visibility === "Public")
+          .map((song) => <SongCard key={song.id} song={song} />)
       )}
     </ScrollView>
   );
@@ -332,8 +395,8 @@ export default function App() {
       <View style={styles.panel}>
         <Text style={styles.sectionTitle}>Mix Studio</Text>
         <Text style={styles.muted}>
-          Audio effects, reverb, echo, bass, treble, and pitch
-          correction require a separate audio-processing implementation.
+          Reverb, echo, bass, treble, compression, and pitch
+          correction are not implemented in this version yet.
         </Text>
       </View>
     </ScrollView>
@@ -363,12 +426,14 @@ export default function App() {
       <Text style={styles.sectionTitle}>Song Catalogue</Text>
 
       {songs.length === 0 ? (
-        <Text style={styles.muted}>No songs saved yet.</Text>
+        <Text style={styles.muted}>No songs loaded yet.</Text>
       ) : (
         songs.map((song) => (
           <SongCard key={song.id} song={song} />
         ))
       )}
+
+      <Button label="Refresh Songs" onPress={loadSongs} />
     </ScrollView>
   );
 
@@ -442,7 +507,7 @@ export default function App() {
 
         <Text style={styles.small}>
           {recordingUri
-            ? "Recording ready on your device; it will not be uploaded yet."
+            ? "A recording exists on this device. It will not be uploaded yet."
             : "You can record vocals in Artist Studio."}
         </Text>
 
@@ -462,47 +527,62 @@ export default function App() {
     </ScrollView>
   );
 
-  const Discover = () => (
-    <ScrollView>
-      <Text style={styles.pageTitle}>Discover ✨</Text>
-      <Text style={styles.muted}>
-        Explore songs added during this app session.
-      </Text>
+  const Discover = () => {
+    const publicSongs = songs.filter(
+      (song) => song.visibility === "Public"
+    );
 
-      {songs.filter((s) => s.visibility === "Public").length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.tileIcon}>♫</Text>
-          <Text style={styles.songTitle}>Discover new sounds</Text>
-          <Text style={styles.muted}>
-            Public songs will appear here when loaded.
-          </Text>
-        </View>
-      ) : (
-        songs
-          .filter((s) => s.visibility === "Public")
-          .map((song) => (
+    return (
+      <ScrollView>
+        <Text style={styles.pageTitle}>Discover ✨</Text>
+        <Text style={styles.muted}>
+          Explore published VoiceStar songs.
+        </Text>
+
+        {publicSongs.length === 0 ? (
+          <View style={styles.empty}>
+            <Text style={styles.tileIcon}>♫</Text>
+            <Text style={styles.songTitle}>Discover new sounds</Text>
+            <Text style={styles.muted}>
+              Public songs will appear here.
+            </Text>
+          </View>
+        ) : (
+          publicSongs.map((song) => (
             <SongCard key={song.id} song={song} />
           ))
-      )}
+        )}
 
-      <Button
-        label="Publish a Song"
-        onPress={() => setTab("Publish")}
-      />
-    </ScrollView>
-  );
+        <Button
+          label="Refresh Songs"
+          onPress={loadSongs}
+        />
+        <Button
+          label="Publish a Song"
+          onPress={() => setTab("Publish")}
+          secondary
+        />
+      </ScrollView>
+    );
+  };
 
   const Profile = () => (
     <ScrollView>
       <Text style={styles.pageTitle}>Artist Profile 🌟</Text>
+
       <View style={styles.panel}>
         <Text style={styles.tileIcon}>🎤</Text>
         <Text style={styles.heroTitle}>
           {artist.trim() || "New Artist"}
         </Text>
-        <Text style={styles.muted}>Your VoiceStar artist profile</Text>
+        <Text style={styles.muted}>
+          Your VoiceStar artist profile
+        </Text>
         <Text style={styles.small}>Genre: {genre}</Text>
-        <Text style={styles.small}>Songs this session: {songs.length}</Text>
+        <Text style={styles.small}>
+          Songs loaded: {songs.length}
+        </Text>
+
         <Button
           label="Publish a Song"
           onPress={() => setTab("Publish")}
@@ -674,6 +754,15 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginTop: 12,
     marginBottom: 12,
+  },
+  sectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  refreshText: {
+    color: C.pink,
+    fontWeight: "700",
   },
   muted: {
     color: C.muted,
