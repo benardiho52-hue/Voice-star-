@@ -1,498 +1,483 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
-SafeAreaView,
-View,
-Text,
-ScrollView,
-TouchableOpacity,
-TextInput,
-StatusBar,
-StyleSheet,
-Alert,
-ActivityIndicator,
+  SafeAreaView,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  StatusBar,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 
-import { supabase } from "./lib/supabase";
 import {
-fetchSongs,
-publishSong as saveSong,
+  fetchSongs,
+  publishSong as saveSong,
 } from "./services/voiceStar";
 
 const C = {
-bg: "#090711",
-panel: "#151022",
-panel2: "#211632",
-purple: "#A855F7",
-pink: "#FF4FC8",
-white: "#FFFFFF",
-muted: "#B8AFC8",
-border: "#332544",
+  bg: "#090711",
+  panel: "#151022",
+  panel2: "#211632",
+  purple: "#A855F7",
+  pink: "#FF4FC8",
+  white: "#FFFFFF",
+  muted: "#B9ADC9",
+  border: "#352448",
 };
 
 export default function App() {
-const [tab, setTab] = useState("Home");
-const [songs, setSongs] = useState([]);
-const [loading, setLoading] = useState(false);
-const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState("Home");
+  const [songs, setSongs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
-const [title, setTitle] = useState("");
-const [artist, setArtist] = useState("");
-const [genre, setGenre] = useState("Afrobeats");
-const [description, setDescription] = useState("");
-const [visibility, setVisibility] = useState("Public");
+  const [title, setTitle] = useState("");
+  const [artist, setArtist] = useState("");
+  const [genre, setGenre] = useState("Afrobeats");
+  const [description, setDescription] = useState("");
+  const [audioUrl, setAudioUrl] = useState("");
+  const [coverUrl, setCoverUrl] = useState("");
+  const [visibility, setVisibility] = useState("public");
 
-const loadSongs = useCallback(async () => {
-setLoading(true);
-try {
-const result = await fetchSongs();
-setSongs(result);
-} catch (error) {
-console.log("Song loading:", error.message);
-Alert.alert("Song loading failed", error.message);
-} finally {
-setLoading(false);
-}
-}, []);
+  const loadSongs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await fetchSongs();
+      setSongs(Array.isArray(result) ? result : []);
+    } catch (error) {
+      console.log("Load songs error:", error.message);
+      setSongs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-useEffect(() => {
-loadSongs();
-}, [loadSongs]);
+  useEffect(() => {
+    loadSongs();
+  }, [loadSongs]);
 
-const publishSong = async () => {
-if (saving) return;
+  const publishSong = async () => {
+    if (!title.trim()) {
+      Alert.alert("Title required", "Enter your song title.");
+      return;
+    }
 
-if (!title.trim()) {
-  Alert.alert("Song title needed", "Enter your song title first.");
-  return;
-}
+    if (!audioUrl.trim()) {
+      Alert.alert(
+        "Audio URL required",
+        "Enter a direct URL to your uploaded song audio."
+      );
+      return;
+    }
 
-setSaving(true);
+    setPublishing(true);
 
-try {
-  const savedSong = await saveSong({
-    title: title.trim(),
-    artist_name: artist.trim() || "New Artist",
-    genre: genre.trim() || "Afrobeats",
-    description: description.trim(),
-    audio_url: null,
-    cover_url: null,
-    visibility: visibility === "Private" ? "private" : "public",
-  });
+    try {
+      const saved = await saveSong({
+        title: title.trim(),
+        artist_name: artist.trim() || "VoiceStar Artist",
+        genre: genre.trim() || "Afrobeats",
+        description: description.trim(),
+        audio_url: audioUrl.trim(),
+        cover_url: coverUrl.trim() || null,
+        visibility,
+      });
 
-  setSongs((previous) => [
-    savedSong,
-    ...previous.filter((song) => song.id !== savedSong.id),
-  ]);
+      setSongs((previous) => [saved, ...previous]);
+      setTitle("");
+      setArtist("");
+      setDescription("");
+      setAudioUrl("");
+      setCoverUrl("");
+      setTab("Home");
 
-  setTitle("");
-  setDescription("");
-  setTab("Home");
+      Alert.alert("Success", "Your song has been published.");
+      await loadSongs();
+    } catch (error) {
+      Alert.alert(
+        "Publishing failed",
+        error.message || "Please try again."
+      );
+    } finally {
+      setPublishing(false);
+    }
+  };
 
-  Alert.alert(
-    "Song published",
-    "Your song details have been saved. Audio upload is not enabled in this version."
-  );
-} catch (error) {
-  Alert.alert(
-    "Publishing failed",
-    error.message || "Check your sign-in, database columns, and permissions."
-  );
-} finally {
-  setSaving(false);
-}
-
-};
-
-const renderSong = (song) => (
-<View key={String(song.id)} style={styles.songCard}>
-<View style={styles.songIcon}>
-<Text style={styles.songIconText}>♫</Text>
-</View>
-<View style={styles.songInfo}>
-<Text style={styles.songTitle}>{song.title}</Text>
-<Text style={styles.muted}>
-{song.artist} · {song.genre}
-</Text>
-{!!song.description && (
-<Text style={styles.description}>{song.description}</Text>
-)}
-</View>
-</View>
-);
-
-const renderHome = () => (
-<>
-<View style={styles.hero}>
-<Text style={styles.brand}>VoiceStar</Text>
-<Text style={styles.heroTitle}>Your stage, your voice, your star power!</Text>
-<Text style={styles.muted}>
-Share your music and discover new voices.
-</Text>
-<TouchableOpacity
-style={styles.primaryButton}
-onPress={() => setTab("Studio")}
->
-<Text style={styles.primaryButtonText}>Publish a song</Text>
-</TouchableOpacity>
-</View>
-
-  <View style={styles.sectionHeader}>
-    <Text style={styles.sectionTitle}>New Voices</Text>
-    <TouchableOpacity onPress={loadSongs}>
-      <Text style={styles.link}>Refresh</Text>
-    </TouchableOpacity>
-  </View>
-
-  {loading ? (
-    <ActivityIndicator color={C.pink} style={{ margin: 24 }} />
-  ) : songs.length ? (
-    songs.map(renderSong)
-  ) : (
-    <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>Your stage is waiting</Text>
-      <Text style={styles.muted}>
-        Published public songs will appear here.
-      </Text>
-    </View>
-  )}
-</>
-
-);
-
-const renderDiscover = () => (
-<View style={styles.empty}>
-<Text style={styles.sectionTitle}>Discover Music</Text>
-<Text style={styles.muted}>
-Explore publicly published songs from VoiceStar artists.
-</Text>
-<TouchableOpacity style={styles.secondaryButton} onPress={loadSongs}>
-<Text style={styles.primaryButtonText}>Load songs</Text>
-</TouchableOpacity>
-{songs.map(renderSong)}
-</View>
-);
-
-const renderStudio = () => (
-<View style={styles.formCard}>
-<Text style={styles.sectionTitle}>Artist Studio</Text>
-<Text style={styles.muted}>
-Add your song details and publish to VoiceStar.
-</Text>
-
-  <Text style={styles.label}>Song title *</Text>
-  <TextInput
-    style={styles.input}
-    value={title}
-    onChangeText={setTitle}
-    placeholder="Enter song title"
-    placeholderTextColor={C.muted}
-    maxLength={120}
-  />
-
-  <Text style={styles.label}>Artist name</Text>
-  <TextInput
-    style={styles.input}
-    value={artist}
-    onChangeText={setArtist}
-    placeholder="Your artist name"
-    placeholderTextColor={C.muted}
-    maxLength={100}
-  />
-
-  <Text style={styles.label}>Genre</Text>
-  <TextInput
-    style={styles.input}
-    value={genre}
-    onChangeText={setGenre}
-    placeholder="Afrobeats"
-    placeholderTextColor={C.muted}
-    maxLength={60}
-  />
-
-  <Text style={styles.label}>Description</Text>
-  <TextInput
-    style={[styles.input, styles.multiline]}
-    value={description}
-    onChangeText={setDescription}
-    placeholder="Tell listeners about your song"
-    placeholderTextColor={C.muted}
-    multiline
-    maxLength={1000}
-  />
-
-  <Text style={styles.label}>Who can listen?</Text>
-  <View style={styles.choiceRow}>
-    {["Public", "Private"].map((option) => (
-      <TouchableOpacity
-        key={option}
-        style={[
-          styles.choice,
-          visibility === option && styles.choiceSelected,
-        ]}
-        onPress={() => setVisibility(option)}
-      >
-        <Text style={styles.choiceText}>{option}</Text>
-      </TouchableOpacity>
-    ))}
-  </View>
-
-  <TouchableOpacity
-    style={[styles.primaryButton, saving && styles.disabled]}
-    onPress={publishSong}
-    disabled={saving}
-  >
-    <Text style={styles.primaryButtonText}>
-      {saving ? "Publishing..." : "Publish song"}
-    </Text>
-  </TouchableOpacity>
-</View>
-
-);
-
-const renderProfile = () => (
-<View style={styles.empty}>
-<Text style={styles.sectionTitle}>Artist Profile</Text>
-<Text style={styles.muted}>
-Your public songs are listed below.
-</Text>
-{songs.map(renderSong)}
-<TouchableOpacity
-style={styles.secondaryButton}
-onPress={() => setTab("Studio")}
->
-<Text style={styles.primaryButtonText}>Publish a song</Text>
-</TouchableOpacity>
-</View>
-);
-
-return (
-<SafeAreaView style={styles.container}>
-<StatusBar barStyle="light-content" backgroundColor={C.bg} />
-
-  <ScrollView
-    style={styles.content}
-    contentContainerStyle={styles.contentInner}
-    keyboardShouldPersistTaps="handled"
-  >
-    {tab === "Home" && renderHome()}
-    {tab === "Discover" && renderDiscover()}
-    {tab === "Studio" && renderStudio()}
-    {tab === "Profile" && renderProfile()}
-  </ScrollView>
-
-  <View style={styles.bottomNav}>
-    {["Home", "Discover", "Studio", "Profile"].map((item) => (
-      <TouchableOpacity
-        key={item}
-        style={styles.navItem}
-        onPress={() => setTab(item)}
-      >
-        <Text
-          style={[
-            styles.navText,
-            tab === item && styles.navTextActive,
-          ]}
-        >
-          {item}
+  const SongCard = ({ song }) => (
+    <View style={styles.songCard}>
+      <View style={styles.musicIcon}>
+        <Text style={styles.musicSymbol}>♫</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.songTitle}>{song.title}</Text>
+        <Text style={styles.muted}>
+          {song.artist_name || song.artist || "VoiceStar Artist"}
+          {" · "}
+          {song.genre || "Afrobeats"}
         </Text>
-      </TouchableOpacity>
-    ))}
-  </View>
-</SafeAreaView>
+      </View>
+    </View>
+  );
 
-);
+  const renderSongs = () => {
+    if (loading) {
+      return <ActivityIndicator color={C.pink} />;
+    }
+
+    if (!songs.length) {
+      return (
+        <View style={styles.empty}>
+          <Text style={styles.heading}>Your stage is waiting!</Text>
+          <Text style={styles.muted}>
+            Your public songs will appear here.
+          </Text>
+        </View>
+      );
+    }
+
+    return songs.map((song, index) => (
+      <SongCard key={song.id || index} song={song} />
+    ));
+  };
+
+  const renderStudio = () => (
+    <View>
+      <Text style={styles.heading}>Artist Studio</Text>
+      <Text style={styles.muted}>
+        Prepare your song for publication.
+      </Text>
+
+      <View style={styles.panel}>
+        <Text style={styles.label}>Song title *</Text>
+        <TextInput
+          value={title}
+          onChangeText={setTitle}
+          placeholder="Enter song title"
+          placeholderTextColor={C.muted}
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>Artist name</Text>
+        <TextInput
+          value={artist}
+          onChangeText={setArtist}
+          placeholder="Your artist name"
+          placeholderTextColor={C.muted}
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>Genre</Text>
+        <TextInput
+          value={genre}
+          onChangeText={setGenre}
+          placeholder="Afrobeats"
+          placeholderTextColor={C.muted}
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>Song audio URL *</Text>
+        <TextInput
+          value={audioUrl}
+          onChangeText={setAudioUrl}
+          placeholder="https://example.com/song.mp3"
+          placeholderTextColor={C.muted}
+          autoCapitalize="none"
+          keyboardType="url"
+          style={styles.input}
+        />
+
+        <Text style={styles.hint}>
+          This requires an uploaded audio file URL. Phone audio upload
+          is not implemented in this screen yet.
+        </Text>
+
+        <Text style={styles.label}>Cover image URL (optional)</Text>
+        <TextInput
+          value={coverUrl}
+          onChangeText={setCoverUrl}
+          placeholder="https://example.com/cover.jpg"
+          placeholderTextColor={C.muted}
+          autoCapitalize="none"
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>Description</Text>
+        <TextInput
+          value={description}
+          onChangeText={setDescription}
+          placeholder="Describe your song"
+          placeholderTextColor={C.muted}
+          multiline
+          style={[styles.input, { minHeight: 85 }]}
+        />
+
+        <Text style={styles.label}>Visibility</Text>
+        <View style={styles.row}>
+          {["public", "private"].map((item) => (
+            <TouchableOpacity
+              key={item}
+              onPress={() => setVisibility(item)}
+              style={[
+                styles.choice,
+                visibility === item && styles.selected,
+              ]}
+            >
+              <Text style={styles.choiceText}>
+                {item === "public" ? "🌍 Public" : "🔒 Private"}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          disabled={publishing}
+          onPress={publishSong}
+          style={styles.primary}
+        >
+          {publishing ? (
+            <ActivityIndicator color={C.white} />
+          ) : (
+            <Text style={styles.primaryText}>Publish Song</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
+
+      <View style={styles.header}>
+        <View style={styles.logo}>
+          <Text style={styles.logoText}>V</Text>
+        </View>
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={styles.brand}>VoiceStar</Text>
+          <Text style={styles.tagline}>YOUR VOICE. YOUR STAGE.</Text>
+        </View>
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 18, paddingBottom: 30 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {tab === "Home" && (
+          <View>
+            <View style={styles.hero}>
+              <Text style={styles.heroSmall}>WELCOME TO VOICESTAR</Text>
+              <Text style={styles.heroTitle}>
+                Your stage.{"\n"}Your star power!
+              </Text>
+              <Text style={styles.muted}>
+                Discover music and share your voice with the world.
+              </Text>
+              <TouchableOpacity
+                style={styles.primary}
+                onPress={() => setTab("Studio")}
+              >
+                <Text style={styles.primaryText}>＋ Publish a Song</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.heading}>New Voices</Text>
+            {renderSongs()}
+          </View>
+        )}
+
+        {tab === "Discover" && (
+          <View>
+            <Text style={styles.heading}>Discover</Text>
+            <Text style={styles.muted}>Explore music from artists.</Text>
+            {renderSongs()}
+          </View>
+        )}
+
+        {tab === "Studio" && renderStudio()}
+
+        {tab === "Profile" && (
+          <View style={styles.empty}>
+            <Text style={styles.heading}>Artist Profile</Text>
+            <Text style={styles.muted}>
+              Your VoiceStar artist journey starts here.
+            </Text>
+            <TouchableOpacity
+              style={styles.primary}
+              onPress={() => setTab("Studio")}
+            >
+              <Text style={styles.primaryText}>Publish a Song</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+
+      <View style={styles.bottomNav}>
+        {[
+          ["Home", "⌂"],
+          ["Discover", "⌕"],
+          ["Studio", "♫"],
+          ["Profile", "◉"],
+        ].map(([name, symbol]) => (
+          <TouchableOpacity
+            key={name}
+            style={styles.navItem}
+            onPress={() => setTab(name)}
+          >
+            <Text
+              style={[
+                styles.navIcon,
+                tab === name && { color: C.pink },
+              ]}
+            >
+              {symbol}
+            </Text>
+            <Text
+              style={[
+                styles.navLabel,
+                tab === name && { color: C.pink },
+              ]}
+            >
+              {name}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-container: {
-flex: 1,
-backgroundColor: C.bg,
-},
-content: {
-flex: 1,
-},
-contentInner: {
-padding: 18,
-paddingBottom: 28,
-},
-hero: {
-backgroundColor: C.panel,
-borderRadius: 22,
-borderWidth: 1,
-borderColor: C.border,
-padding: 22,
-marginBottom: 26,
-},
-brand: {
-color: C.pink,
-fontSize: 27,
-fontWeight: "900",
-marginBottom: 18,
-},
-heroTitle: {
-color: C.white,
-fontSize: 25,
-fontWeight: "800",
-lineHeight: 33,
-marginBottom: 10,
-},
-muted: {
-color: C.muted,
-fontSize: 14,
-lineHeight: 21,
-},
-primaryButton: {
-backgroundColor: C.purple,
-padding: 15,
-borderRadius: 13,
-alignItems: "center",
-marginTop: 20,
-},
-secondaryButton: {
-backgroundColor: C.pink,
-padding: 13,
-borderRadius: 12,
-alignItems: "center",
-marginTop: 18,
-},
-primaryButtonText: {
-color: C.white,
-fontWeight: "800",
-fontSize: 15,
-},
-disabled: {
-opacity: 0.6,
-},
-sectionHeader: {
-flexDirection: "row",
-justifyContent: "space-between",
-alignItems: "center",
-marginBottom: 12,
-},
-sectionTitle: {
-color: C.white,
-fontSize: 21,
-fontWeight: "800",
-marginBottom: 8,
-},
-link: {
-color: C.pink,
-fontWeight: "700",
-},
-songCard: {
-flexDirection: "row",
-backgroundColor: C.panel,
-borderRadius: 15,
-borderWidth: 1,
-borderColor: C.border,
-padding: 14,
-marginBottom: 12,
-},
-songIcon: {
-width: 48,
-height: 48,
-borderRadius: 12,
-backgroundColor: C.panel2,
-alignItems: "center",
-justifyContent: "center",
-marginRight: 12,
-},
-songIconText: {
-color: C.pink,
-fontSize: 28,
-fontWeight: "900",
-},
-songInfo: {
-flex: 1,
-},
-songTitle: {
-color: C.white,
-fontSize: 16,
-fontWeight: "800",
-marginBottom: 5,
-},
-description: {
-color: C.muted,
-marginTop: 6,
-lineHeight: 20,
-},
-empty: {
-backgroundColor: C.panel,
-borderRadius: 18,
-padding: 20,
-marginBottom: 16,
-},
-emptyTitle: {
-color: C.white,
-fontSize: 18,
-fontWeight: "800",
-marginBottom: 8,
-},
-formCard: {
-backgroundColor: C.panel,
-borderRadius: 20,
-borderWidth: 1,
-borderColor: C.border,
-padding: 18,
-},
-label: {
-color: C.white,
-fontWeight: "700",
-marginTop: 17,
-marginBottom: 8,
-},
-input: {
-backgroundColor: C.bg,
-color: C.white,
-borderColor: C.border,
-borderWidth: 1,
-borderRadius: 12,
-paddingHorizontal: 13,
-paddingVertical: 13,
-fontSize: 15,
-},
-multiline: {
-minHeight: 95,
-textAlignVertical: "top",
-},
-choiceRow: {
-flexDirection: "row",
-gap: 10,
-},
-choice: {
-flex: 1,
-borderRadius: 12,
-padding: 13,
-borderWidth: 1,
-borderColor: C.border,
-alignItems: "center",
-},
-choiceSelected: {
-backgroundColor: C.purple,
-borderColor: C.pink,
-},
-choiceText: {
-color: C.white,
-fontWeight: "700",
-},
-bottomNav: {
-flexDirection: "row",
-justifyContent: "space-around",
-backgroundColor: "#181024",
-borderTopWidth: 1,
-borderTopColor: C.border,
-paddingVertical: 15,
-},
-navItem: {
-alignItems: "center",
-paddingHorizontal: 5,
-},
-navText: {
-color: C.muted,
-fontWeight: "700",
-fontSize: 12,
-},
-navTextActive: {
-color: C.pink,
-},
+  safe: { flex: 1, backgroundColor: C.bg },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  logo: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: C.purple,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logoText: { color: C.white, fontSize: 26, fontWeight: "900" },
+  brand: { color: C.white, fontSize: 21, fontWeight: "900" },
+  tagline: { color: C.muted, fontSize: 9, letterSpacing: 1 },
+  hero: {
+    backgroundColor: C.panel,
+    borderColor: C.border,
+    borderWidth: 1,
+    borderRadius: 22,
+    padding: 20,
+    marginBottom: 24,
+  },
+  heroSmall: { color: C.pink, fontWeight: "800", fontSize: 11 },
+  heroTitle: {
+    color: C.white,
+    fontSize: 32,
+    lineHeight: 39,
+    fontWeight: "900",
+    marginVertical: 12,
+  },
+  heading: {
+    color: C.white,
+    fontSize: 23,
+    fontWeight: "900",
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  muted: { color: C.muted, fontSize: 13, lineHeight: 20 },
+  panel: {
+    backgroundColor: C.panel,
+    borderRadius: 18,
+    padding: 15,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  label: {
+    color: C.white,
+    fontWeight: "700",
+    marginTop: 14,
+    marginBottom: 7,
+  },
+  input: {
+    backgroundColor: C.bg,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 11,
+    color: C.white,
+    padding: 12,
+    fontSize: 14,
+  },
+  hint: { color: C.muted, fontSize: 11, lineHeight: 16, marginTop: 7 },
+  row: { flexDirection: "row", gap: 10 },
+  choice: {
+    flex: 1,
+    backgroundColor: C.bg,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 11,
+    padding: 12,
+    alignItems: "center",
+  },
+  selected: { borderColor: C.pink, backgroundColor: "#30152F" },
+  choiceText: { color: C.white, fontWeight: "700" },
+  primary: {
+    backgroundColor: C.purple,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 17,
+  },
+  primaryText: { color: C.white, fontSize: 15, fontWeight: "800" },
+  songCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.panel,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 14,
+    padding: 13,
+    marginTop: 10,
+  },
+  musicIcon: {
+    width: 45,
+    height: 45,
+    borderRadius: 12,
+    backgroundColor: C.panel2,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  musicSymbol: { color: C.pink, fontSize: 27, fontWeight: "900" },
+  songTitle: { color: C.white, fontSize: 15, fontWeight: "800" },
+  empty: {
+    backgroundColor: C.panel,
+    borderColor: C.border,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  bottomNav: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    backgroundColor: "#181024",
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingVertical: 9,
+  },
+  navItem: { flex: 1, alignItems: "center" },
+  navIcon: { color: C.muted, fontSize: 23 },
+  navLabel: { color: C.muted, fontSize: 10, marginTop: 3 },
 });
