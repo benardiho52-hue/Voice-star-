@@ -12,10 +12,12 @@ import {
   ActivityIndicator,
 } from "react-native";
 
+
 import {
-  fetchSongs,
+  getSongs as fetchSongs,
   publishSong as saveSong,
 } from "./services/voiceStar";
+
 
 const C = {
   bg: "#090711",
